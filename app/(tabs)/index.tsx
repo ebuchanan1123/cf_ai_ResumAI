@@ -18,7 +18,7 @@ import {
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 
-const API_URL = 'http://192.168.0.198:3001';
+const API_URL = 'http://10.198.139.105:3001';
 
 type Tone = 'Concise' | 'Technical' | 'Impact-focused';
 
@@ -204,7 +204,7 @@ export default function HomeScreen() {
       {showSplash && (
         <Animated.View style={[styles.splashContainer, { opacity: splashOpacity }]}>
           <View style={styles.splashInner}>
-            <Text style={styles.splashTitle}>ResumAI</Text>
+            <Text style={styles.splashTitle}>Bullets</Text>
             <Text style={styles.splashSubtitle}>Crafting stronger resume bullets</Text>
             <ActivityIndicator size="large" style={styles.splashSpinner} />
           </View>
