@@ -51,6 +51,14 @@ type TailoredResumeResponse = {
     endDate: string;
     details: string;
   }[];
+  certifications: {
+    name: string;
+    issuer: string;
+    issueDate: string;
+    expiryDate: string;
+    credentialId: string;
+    details: string;
+  }[];
   missingKeywords: string[];
 };
 
@@ -211,59 +219,72 @@ export default function ResumeScreen() {
   const fullResumeText = useMemo(() => {
     if (!result || !profile) return '';
 
-    const headerLine = [
-      profile.email?.trim(),
-      profile.phone?.trim(),
-      profile.location?.trim(),
-    ]
+    const headerLine = [profile.email?.trim(), profile.phone?.trim(), profile.location?.trim()]
       .filter(Boolean)
       .join(' | ');
 
     return `
-${profile.fullName || 'Your Name'}
-${headerLine}
+  ${profile.fullName || 'Your Name'}
+  ${headerLine}
 
-SUMMARY
-${result.summary}
+  SUMMARY
+  ${result.summary}
 
-EDUCATION
-${result.education
-  .map(
-    (edu) =>
-      `${edu.school}
-${edu.degree}${edu.fieldOfStudy ? `, ${edu.fieldOfStudy}` : ''}
-${edu.startDate} - ${edu.endDate}
-${edu.details || ''}`.trim()
-  )
-  .join('\n\n')}
+  EDUCATION
+  ${result.education
+    .map(
+      (edu) =>
+        `${edu.school}
+  ${edu.degree}${edu.fieldOfStudy ? `, ${edu.fieldOfStudy}` : ''}
+  ${edu.startDate} - ${edu.endDate}
+  ${edu.details || ''}`.trim()
+    )
+    .join('\n\n')}
 
-SKILLS
-${result.skills.join(', ')}
+  SKILLS
+  ${result.skills.join(', ')}
 
-PROJECTS
-${result.projects
-  .map(
-    (project) =>
-      `${project.name}
-${project.role}
-${project.bullets.map((b) => `• ${b}`).join('\n')}`.trim()
-  )
-  .join('\n\n')}
+  PROJECTS
+  ${result.projects
+    .map(
+      (project) =>
+        `${project.name}
+  ${project.role}
+  ${project.bullets.map((b) => `• ${b}`).join('\n')}`.trim()
+    )
+    .join('\n\n')}
 
-EXPERIENCE
-${result.experience
-  .map(
-    (exp) =>
-      `${exp.company}
-${exp.title}
-${exp.startDate} - ${exp.endDate}${exp.location ? ` | ${exp.location}` : ''}
-${exp.bullets.map((b) => `• ${b}`).join('\n')}`.trim()
-  )
-  .join('\n\n')}
+  EXPERIENCE
+  ${result.experience
+    .map(
+      (exp) =>
+        `${exp.company}
+  ${exp.title}
+  ${exp.startDate} - ${exp.endDate}${exp.location ? ` | ${exp.location}` : ''}
+  ${exp.bullets.map((b) => `• ${b}`).join('\n')}`.trim()
+    )
+    .join('\n\n')}
 
-MISSING KEYWORDS
-${result.missingKeywords.join(', ')}
-`.trim();
+  ${
+    result.certifications.length > 0
+      ? `CERTIFICATIONS
+  ${result.certifications
+    .map(
+      (cert) =>
+        `${cert.name}
+  ${cert.issuer}${cert.issueDate ? ` | ${cert.issueDate}` : ''}${
+          cert.expiryDate ? ` | Expires ${cert.expiryDate}` : ''
+        }
+  ${cert.credentialId ? `Credential ID: ${cert.credentialId}` : ''}
+  ${cert.details || ''}`.trim()
+    )
+    .join('\n\n')}
+
+  `
+      : ''
+  }MISSING KEYWORDS
+  ${result.missingKeywords.join(', ')}
+  `.trim();
   }, [profile, result]);
 
   const copyFullResume = async () => {
@@ -346,6 +367,17 @@ ${result.missingKeywords.join(', ')}
     bullets[bulletIndex] = value;
     updated[projectIndex] = { ...updated[projectIndex], bullets };
     setResult({ ...result, projects: updated });
+  };
+
+  const updateCertificationField = (
+    index: number,
+    field: keyof TailoredResumeResponse['certifications'][number],
+    value: string
+  ) => {
+    if (!result) return;
+    const updated = [...result.certifications];
+    updated[index] = { ...updated[index], [field]: value };
+    setResult({ ...result, certifications: updated });
   };
 
   const escapeHtml = (value: string) =>
@@ -498,6 +530,29 @@ ${result.missingKeywords.join(', ')}
     `
       )
       .join('')}
+
+    ${
+      result.certifications.length > 0
+        ? `
+        <div class="section-title">CERTIFICATIONS</div>
+        ${result.certifications
+          .map(
+            (cert) => `
+          <div class="item">
+            <div class="item-title">${escapeHtml(cert.name)}</div>
+            <div class="item-subtitle">${escapeHtml(cert.issuer)}</div>
+            <div class="meta">${escapeHtml(
+              `${cert.issueDate || ''}${cert.expiryDate ? ` | Expires ${cert.expiryDate}` : ''}`
+            )}</div>
+            ${cert.credentialId ? `<div>${escapeHtml(`Credential ID: ${cert.credentialId}`)}</div>` : ''}
+            ${cert.details ? `<div>${escapeHtml(cert.details)}</div>` : ''}
+          </div>
+        `
+          )
+          .join('')}
+      `
+        : ''
+    }
   </body>
 </html>
     `.trim();
@@ -891,6 +946,60 @@ ${result.missingKeywords.join(', ')}
                 ))}
               </View>
 
+              {result.certifications.length > 0 && (
+                <View style={styles.resultCard}>
+                  <Text style={styles.resultTitle}>Certifications</Text>
+                  {result.certifications.map((cert, index) => (
+                    <View key={index} style={styles.blockItem}>
+                      <TextInput
+                        style={styles.editInput}
+                        value={cert.name}
+                        onChangeText={(value) => updateCertificationField(index, 'name', value)}
+                        placeholder="Certification name"
+                        placeholderTextColor="#8C8C8C"
+                      />
+                      <TextInput
+                        style={styles.editInput}
+                        value={cert.issuer}
+                        onChangeText={(value) => updateCertificationField(index, 'issuer', value)}
+                        placeholder="Issuer"
+                        placeholderTextColor="#8C8C8C"
+                      />
+                      <TextInput
+                        style={styles.editInput}
+                        value={cert.issueDate}
+                        onChangeText={(value) => updateCertificationField(index, 'issueDate', value)}
+                        placeholder="Issue date"
+                        placeholderTextColor="#8C8C8C"
+                      />
+                      <TextInput
+                        style={styles.editInput}
+                        value={cert.expiryDate}
+                        onChangeText={(value) => updateCertificationField(index, 'expiryDate', value)}
+                        placeholder="Expiry date"
+                        placeholderTextColor="#8C8C8C"
+                      />
+                      <TextInput
+                        style={styles.editInput}
+                        value={cert.credentialId}
+                        onChangeText={(value) => updateCertificationField(index, 'credentialId', value)}
+                        placeholder="Credential ID"
+                        placeholderTextColor="#8C8C8C"
+                      />
+                      <TextInput
+                        style={[styles.editInput, styles.editTextArea]}
+                        multiline
+                        value={cert.details}
+                        onChangeText={(value) => updateCertificationField(index, 'details', value)}
+                        placeholder="Details"
+                        placeholderTextColor="#8C8C8C"
+                        textAlignVertical="top"
+                      />
+                    </View>
+                  ))}
+                </View>
+              )}
+
               <View style={styles.resultCard}>
                 <View style={styles.resultHeader}>
                   <Text style={styles.resultTitle}>Missing Keywords</Text>
@@ -926,267 +1035,291 @@ ${result.missingKeywords.join(', ')}
 
 const styles = StyleSheet.create({
   safeArea: {
-    flex: 1,
-    backgroundColor: '#000000',
-  },
-  keyboardAvoidingContainer: {
-    flex: 1,
-  },
-  screen: {
-    flex: 1,
-    backgroundColor: '#000000',
-  },
-  contentContainer: {
-    padding: 20,
-    paddingBottom: 180,
-  },
-  loadingWrap: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 30,
-  },
-  loadingText: {
-    color: '#A3A3A3',
-    marginTop: 12,
-    fontSize: 15,
-  },
-  title: {
-    color: '#FFFFFF',
-    fontSize: 34,
-    fontWeight: '800',
-    marginBottom: 10,
-  },
-  subtitle: {
-    color: '#A3A3A3',
-    fontSize: 16,
-    lineHeight: 24,
-    marginBottom: 24,
-  },
-  sectionCard: {
-    backgroundColor: '#0C0C0C',
-    borderWidth: 1,
-    borderColor: '#1D1D1D',
-    borderRadius: 18,
-    padding: 16,
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    color: '#FFFFFF',
-    fontSize: 20,
-    fontWeight: '800',
-  },
-  profileStatusHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  smallButton: {
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-  },
-  smallButtonText: {
-    color: '#111111',
-    fontWeight: '700',
-    fontSize: 13,
-  },
-  statusText: {
-    color: '#A3A3A3',
-    fontSize: 15,
-    lineHeight: 22,
-    marginTop: 12,
-  },
-  label: {
-    color: '#FFFFFF',
-    marginTop: 14,
-    marginBottom: 8,
-    fontWeight: '700',
-    fontSize: 14,
-  },
-  input: {
-    backgroundColor: '#F2F2F2',
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    borderRadius: 16,
-    fontSize: 16,
-    color: '#111111',
-  },
-  jobDescriptionArea: {
-    minHeight: 220,
-    paddingTop: 14,
-    marginTop: 12,
-  },
-  toneRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    marginTop: 2,
-    marginBottom: 18,
-  },
-  toneButton: {
-    backgroundColor: '#161616',
-    borderWidth: 1,
-    borderColor: '#2A2A2A',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 999,
-  },
-  toneButtonActive: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#FFFFFF',
-  },
-  toneButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-  },
-  toneButtonTextActive: {
-    color: '#111111',
-  },
-  primaryButton: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    paddingVertical: 18,
-    alignItems: 'center',
-    marginTop: 10,
-  },
-  primaryButtonText: {
-    color: '#111111',
-    fontWeight: '800',
-    fontSize: 18,
-  },
-  disabledButton: {
-    opacity: 0.7,
-  },
-  resultsSection: {
-    marginTop: 4,
-  },
-  topActionsRow: {
-    gap: 10,
-    marginBottom: 14,
-  },
-  copyFullButton: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  copyFullButtonText: {
-    color: '#111111',
-    fontWeight: '800',
-    fontSize: 16,
-  },
-  exportButton: {
-    backgroundColor: '#1A1A1A',
-    borderWidth: 1,
-    borderColor: '#2C2C2C',
-    borderRadius: 16,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  exportButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '800',
-    fontSize: 16,
-  },
-  resultCard: {
-    backgroundColor: '#F4F4F4',
-    borderRadius: 18,
-    padding: 14,
-    marginBottom: 14,
-  },
-  resultHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  resultTitle: {
-    color: '#111111',
-    fontWeight: '800',
-    fontSize: 15,
-  },
-  copyText: {
-    color: '#111111',
-    fontWeight: '700',
-    fontSize: 13,
-  },
-  resultBody: {
-    color: '#111111',
-    fontSize: 15,
-    lineHeight: 23,
-  },
-  blockItem: {
-    marginTop: 12,
-  },
-  editInput: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    fontSize: 15,
-    color: '#111111',
-    marginTop: 8,
-  },
-  editTextArea: {
-    minHeight: 78,
-    paddingTop: 12,
-  },
-  emptyState: {
-    backgroundColor: '#0C0C0C',
-    borderWidth: 1,
-    borderColor: '#1D1D1D',
-    borderRadius: 18,
-    padding: 18,
-  },
-  emptyStateText: {
-    color: '#8E8E8E',
-    fontSize: 15,
-    lineHeight: 22,
-  },
+  flex: 1,
+  backgroundColor: '#F8FAFC',
+},
+keyboardAvoidingContainer: {
+  flex: 1,
+},
+screen: {
+  flex: 1,
+  backgroundColor: '#F8FAFC',
+},
+contentContainer: {
+  padding: 20,
+  paddingBottom: 180,
+},
+loadingWrap: {
+  flex: 1,
+  justifyContent: 'center',
+  alignItems: 'center',
+  paddingVertical: 30,
+},
+loadingText: {
+  color: '#64748B',
+  marginTop: 12,
+  fontSize: 15,
+},
+title: {
+  color: '#1E293B',
+  fontSize: 34,
+  fontWeight: '800',
+  marginBottom: 10,
+},
+subtitle: {
+  color: '#64748B',
+  fontSize: 16,
+  lineHeight: 24,
+  marginBottom: 24,
+},
+sectionCard: {
+  backgroundColor: '#FFFFFF',
+  borderWidth: 1,
+  borderColor: '#E2E8F0',
+  borderRadius: 18,
+  padding: 16,
+  marginBottom: 16,
+  shadowColor: '#000',
+  shadowOpacity: 0.04,
+  shadowRadius: 10,
+  shadowOffset: { width: 0, height: 4 },
+  elevation: 2,
+},
+sectionTitle: {
+  color: '#1E293B',
+  fontSize: 20,
+  fontWeight: '800',
+},
+profileStatusHeader: {
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+},
+smallButton: {
+  backgroundColor: '#EFF6FF',
+  paddingHorizontal: 12,
+  paddingVertical: 8,
+  borderRadius: 999,
+  borderWidth: 1,
+  borderColor: '#BFDBFE',
+},
+smallButtonText: {
+  color: '#2563EB',
+  fontWeight: '700',
+  fontSize: 13,
+},
+statusText: {
+  color: '#64748B',
+  fontSize: 15,
+  lineHeight: 22,
+  marginTop: 12,
+},
+label: {
+  color: '#1E293B',
+  marginTop: 14,
+  marginBottom: 8,
+  fontWeight: '700',
+  fontSize: 14,
+},
+input: {
+  backgroundColor: '#FFFFFF',
+  paddingHorizontal: 14,
+  paddingVertical: 14,
+  borderRadius: 16,
+  fontSize: 16,
+  color: '#1E293B',
+  borderWidth: 1,
+  borderColor: '#CBD5E1',
+},
+jobDescriptionArea: {
+  minHeight: 220,
+  paddingTop: 14,
+  marginTop: 12,
+},
+toneRow: {
+  flexDirection: 'row',
+  flexWrap: 'wrap',
+  gap: 10,
+  marginTop: 2,
+  marginBottom: 18,
+},
+toneButton: {
+  backgroundColor: '#FFFFFF',
+  borderWidth: 1,
+  borderColor: '#CBD5E1',
+  paddingHorizontal: 14,
+  paddingVertical: 10,
+  borderRadius: 999,
+},
+toneButtonActive: {
+  backgroundColor: '#2563EB',
+  borderColor: '#2563EB',
+},
+toneButtonText: {
+  color: '#475569',
+  fontWeight: '600',
+},
+toneButtonTextActive: {
+  color: '#FFFFFF',
+},
+primaryButton: {
+  backgroundColor: '#2563EB',
+  borderRadius: 18,
+  paddingVertical: 18,
+  alignItems: 'center',
+  marginTop: 10,
+},
+primaryButtonText: {
+  color: '#FFFFFF',
+  fontWeight: '800',
+  fontSize: 18,
+},
+disabledButton: {
+  opacity: 0.7,
+},
+resultsSection: {
+  marginTop: 4,
+},
+topActionsRow: {
+  gap: 10,
+  marginBottom: 14,
+},
+copyFullButton: {
+  backgroundColor: '#2563EB',
+  borderRadius: 16,
+  paddingVertical: 14,
+  alignItems: 'center',
+},
+copyFullButtonText: {
+  color: '#FFFFFF',
+  fontWeight: '800',
+  fontSize: 16,
+},
+exportButton: {
+  backgroundColor: '#F0FDFA',
+  borderWidth: 1,
+  borderColor: '#99F6E4',
+  borderRadius: 16,
+  paddingVertical: 14,
+  alignItems: 'center',
+},
+exportButtonText: {
+  color: '#0F766E',
+  fontWeight: '800',
+  fontSize: 16,
+},
+resultCard: {
+  backgroundColor: '#FFFFFF',
+  borderRadius: 18,
+  padding: 14,
+  marginBottom: 14,
+  borderWidth: 1,
+  borderColor: '#E2E8F0',
+  shadowColor: '#000',
+  shadowOpacity: 0.03,
+  shadowRadius: 8,
+  shadowOffset: { width: 0, height: 3 },
+  elevation: 1,
+},
+resultHeader: {
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  marginBottom: 10,
+},
+resultTitle: {
+  color: '#1E293B',
+  fontWeight: '800',
+  fontSize: 15,
+},
+copyText: {
+  color: '#2563EB',
+  fontWeight: '700',
+  fontSize: 13,
+},
+resultBody: {
+  color: '#1E293B',
+  fontSize: 15,
+  lineHeight: 23,
+},
+blockItem: {
+  marginTop: 12,
+},
+editInput: {
+  backgroundColor: '#FFFFFF',
+  borderRadius: 14,
+  paddingHorizontal: 12,
+  paddingVertical: 12,
+  fontSize: 15,
+  color: '#1E293B',
+  marginTop: 8,
+  borderWidth: 1,
+  borderColor: '#CBD5E1',
+},
+editTextArea: {
+  minHeight: 78,
+  paddingTop: 12,
+},
+emptyState: {
+  backgroundColor: '#FFFFFF',
+  borderWidth: 1,
+  borderColor: '#E2E8F0',
+  borderRadius: 18,
+  padding: 18,
+},
+emptyStateText: {
+  color: '#94A3B8',
+  fontSize: 15,
+  lineHeight: 22,
+},
 
-  savedVersionCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    padding: 12,
-    marginTop: 12,
-  },
-  savedVersionTitle: {
-    color: '#111111',
-    fontSize: 15,
-    fontWeight: '800',
-  },
-  savedVersionMeta: {
-    color: '#555555',
-    fontSize: 13,
-    marginTop: 4,
-  },
-  savedVersionActions: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 10,
-  },
-  savedVersionButton: {
-    backgroundColor: '#EDEDED',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-  },
-  savedVersionButtonText: {
-    color: '#111111',
-    fontWeight: '700',
-    fontSize: 13,
-  },
-  savedVersionDeleteButton: {
-    backgroundColor: '#1A1A1A',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-  },
-  savedVersionDeleteButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 13,
-  },
+savedVersionCard: {
+  backgroundColor: '#FFFFFF',
+  borderRadius: 14,
+  padding: 12,
+  marginTop: 12,
+  borderWidth: 1,
+  borderColor: '#E2E8F0',
+},
+savedVersionTitle: {
+  color: '#1E293B',
+  fontSize: 15,
+  fontWeight: '800',
+},
+savedVersionMeta: {
+  color: '#64748B',
+  fontSize: 13,
+  marginTop: 4,
+},
+savedVersionActions: {
+  flexDirection: 'row',
+  gap: 8,
+  marginTop: 10,
+},
+savedVersionButton: {
+  backgroundColor: '#EFF6FF',
+  paddingHorizontal: 12,
+  paddingVertical: 8,
+  borderRadius: 999,
+  borderWidth: 1,
+  borderColor: '#BFDBFE',
+},
+savedVersionButtonText: {
+  color: '#2563EB',
+  fontWeight: '700',
+  fontSize: 13,
+},
+savedVersionDeleteButton: {
+  backgroundColor: '#FEF2F2',
+  paddingHorizontal: 12,
+  paddingVertical: 8,
+  borderRadius: 999,
+  borderWidth: 1,
+  borderColor: '#FECACA',
+},
+savedVersionDeleteButtonText: {
+  color: '#DC2626',
+  fontWeight: '700',
+  fontSize: 13,
+},
 });

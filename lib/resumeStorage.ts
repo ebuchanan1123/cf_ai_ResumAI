@@ -25,6 +25,14 @@ export type TailoredResumeResponse = {
     endDate: string;
     details: string;
   }[];
+  certifications: {
+    name: string;
+    issuer: string;
+    issueDate: string;
+    expiryDate: string;
+    credentialId: string;
+    details: string;
+  }[];
   missingKeywords: string[];
 };
 

@@ -27,6 +27,15 @@ export type ProjectItem = {
   description: string;
 };
 
+export type CertificationItem = {
+  name: string;
+  issuer: string;
+  issueDate: string;
+  expiryDate: string;
+  credentialId: string;
+  details: string;
+};
+
 export type UserProfile = {
   fullName: string;
   email: string;
@@ -37,6 +46,7 @@ export type UserProfile = {
   education: EducationItem[];
   experience: ExperienceItem[];
   projects: ProjectItem[];
+  certifications: CertificationItem[];
 };
 
 export const PROFILE_STORAGE_KEY = 'resumai_user_profile';
@@ -68,6 +78,15 @@ export const createEmptyProject = (): ProjectItem => ({
   description: '',
 });
 
+export const createEmptyCertification = (): CertificationItem => ({
+  name: '',
+  issuer: '',
+  issueDate: '',
+  expiryDate: '',
+  credentialId: '',
+  details: '',
+});
+
 export const createEmptyProfile = (): UserProfile => ({
   fullName: '',
   email: '',
@@ -75,9 +94,10 @@ export const createEmptyProfile = (): UserProfile => ({
   location: '',
   summaryHint: '',
   skills: '',
-  education: [createEmptyEducation()],
-  experience: [createEmptyExperience()],
-  projects: [createEmptyProject()],
+  education: [],
+  experience: [],
+  projects: [],
+  certifications: [],
 });
 
 export const saveProfileToStorage = async (profile: UserProfile) => {
@@ -97,18 +117,10 @@ export const loadProfileFromStorage = async (): Promise<UserProfile> => {
     return {
       ...createEmptyProfile(),
       ...parsed,
-      education:
-        Array.isArray(parsed.education) && parsed.education.length > 0
-          ? parsed.education
-          : [createEmptyEducation()],
-      experience:
-        Array.isArray(parsed.experience) && parsed.experience.length > 0
-          ? parsed.experience
-          : [createEmptyExperience()],
-      projects:
-        Array.isArray(parsed.projects) && parsed.projects.length > 0
-          ? parsed.projects
-          : [createEmptyProject()],
+      education: Array.isArray(parsed.education) ? parsed.education : [],
+      experience: Array.isArray(parsed.experience) ? parsed.experience : [],
+      projects: Array.isArray(parsed.projects) ? parsed.projects : [],
+      certifications: Array.isArray(parsed.certifications) ? parsed.certifications : [],
     };
   } catch {
     return createEmptyProfile();

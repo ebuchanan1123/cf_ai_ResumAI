@@ -77,7 +77,17 @@ Return valid JSON only in this exact structure:
       "link": "string",
       "description": "string"
     }
-  ]
+  ],
+  "certifications": [
+    {
+      "name": "string",
+      "issuer": "string",
+      "issueDate": "string",
+      "expiryDate": "string",
+      "credentialId": "string",
+      "details": "string"
+    }
+  ],
 }
 
 Rules:
@@ -237,7 +247,7 @@ Return your answer in valid JSON only, with this exact structure:
       "details": "string"
     }
   ],
-  "missingKeywords": ["string", "string", "string", "string", "string"]
+  "missingKeywords": ["string", "string", "string", "string", "string", "string", "string", "string"]
 }
 
 Rules:
@@ -252,6 +262,7 @@ Rules:
 - Select the most relevant experience and projects instead of trying to include everything
 - Write strong bullet points starting with action verbs
 - For skills, return the most relevant skills for this role
+- Include relevant certifications when they strengthen the application
 - Keep the tone: ${tone || 'Technical'}
 
 User Profile:
@@ -284,8 +295,11 @@ ${jobDescription}
       experience: Array.isArray(parsed.experience) ? parsed.experience.slice(0, 3) : [],
       projects: Array.isArray(parsed.projects) ? parsed.projects.slice(0, 3) : [],
       education: Array.isArray(parsed.education) ? parsed.education.slice(0, 2) : [],
+      certifications: Array.isArray(parsed.certifications)
+        ? parsed.certifications.slice(0, 3)
+        : [],
       missingKeywords: Array.isArray(parsed.missingKeywords)
-        ? parsed.missingKeywords.slice(0, 5)
+        ? parsed.missingKeywords.slice(0, 8)
         : [],
     });
   } catch (error) {
