@@ -23,7 +23,6 @@ import { API_URL } from '@/config/api';
 type Tone = 'Concise' | 'Technical' | 'Impact-focused';
 
 export default function HomeScreen() {
-  const [showSplash, setShowSplash] = useState(true);
   const [jobTitle, setJobTitle] = useState('');
   const [experience, setExperience] = useState('');
   const [jobDescription, setJobDescription] = useState('');
@@ -37,26 +36,7 @@ export default function HomeScreen() {
   const scrollViewRef = useRef<ScrollView | null>(null);
   const bulletRefs = useRef<Record<number, View | null>>({});
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      Animated.parallel([
-        Animated.timing(splashOpacity, {
-          toValue: 0,
-          duration: 450,
-          useNativeDriver: true,
-        }),
-        Animated.timing(mainOpacity, {
-          toValue: 1,
-          duration: 450,
-          useNativeDriver: true,
-        }),
-      ]).start(() => {
-        setShowSplash(false);
-      });
-    }, 1400);
 
-    return () => clearTimeout(timer);
-  }, [mainOpacity, splashOpacity]);
 
   const generate = async () => {
     if (!jobTitle.trim() || experience.trim().length < 20) {
@@ -201,17 +181,8 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      {showSplash && (
-        <Animated.View style={[styles.splashContainer, { opacity: splashOpacity }]}>
-          <View style={styles.splashInner}>
-            <Text style={styles.splashTitle}>Bullets</Text>
-            <Text style={styles.splashSubtitle}>Crafting stronger resume bullets</Text>
-            <ActivityIndicator size="large" style={styles.splashSpinner} />
-          </View>
-        </Animated.View>
-      )}
+      
 
-      <Animated.View style={[styles.mainContainer, { opacity: mainOpacity }]}>
         <KeyboardAvoidingView
           style={styles.keyboardAvoidingContainer}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -355,7 +326,6 @@ export default function HomeScreen() {
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
-      </Animated.View>
     </SafeAreaView>
   );
 }

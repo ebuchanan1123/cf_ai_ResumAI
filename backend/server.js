@@ -3,9 +3,17 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const OpenAI = require('openai');
+const rateLimit = require("express-rate-limit")
 
 const app = express();
 const port = process.env.PORT || 3001;
+
+const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 30
+})
+
+app.use(limiter);
 
 app.use(cors());
 app.use(express.json({ limit: '5mb' }));

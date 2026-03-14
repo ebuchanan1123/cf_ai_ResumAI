@@ -494,7 +494,7 @@ export default function ProfileScreen() {
                   placeholderTextColor="#8C8C8C"
                 />
 
-                <Text style={styles.label}>Location</Text>
+                <Text style={styles.label}>Address</Text>
                 <TextInput
                   style={styles.input}
                   value={profile.location}
