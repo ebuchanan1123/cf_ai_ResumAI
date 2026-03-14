@@ -690,7 +690,7 @@ export default function ProfileScreen() {
               <Text style={styles.groupCaption}>Roles, internships, part-time work, and impact</Text>
             </View>
             <View style={styles.collectionSectionMeta}>
-              <Text style={styles.sectionCount}>{renderCountLabel(profile.experience.length, 'entry')}</Text>
+              <Text style={styles.sectionCount}>{renderCountLabel(profile.experience.length, 'entry', 'entries')}</Text>
               <Text style={styles.expandText}>{expandedSections.experience ? 'Hide' : 'Show'}</Text>
             </View>
           </TouchableOpacity>
@@ -822,7 +822,7 @@ export default function ProfileScreen() {
               <Text style={styles.groupCaption}>Personal builds, course work, and shipped ideas</Text>
             </View>
             <View style={styles.collectionSectionMeta}>
-              <Text style={styles.sectionCount}>{renderCountLabel(profile.projects.length, 'entry')}</Text>
+              <Text style={styles.sectionCount}>{renderCountLabel(profile.projects.length, 'entry', 'entries')}</Text>
               <Text style={styles.expandText}>{expandedSections.projects ? 'Hide' : 'Show'}</Text>
             </View>
           </TouchableOpacity>
@@ -934,7 +934,7 @@ export default function ProfileScreen() {
               <Text style={styles.groupCaption}>Schools, degrees, coursework, and academic context</Text>
             </View>
             <View style={styles.collectionSectionMeta}>
-              <Text style={styles.sectionCount}>{renderCountLabel(profile.education.length, 'entry')}</Text>
+              <Text style={styles.sectionCount}>{renderCountLabel(profile.education.length, 'entry', 'entries')}</Text>
               <Text style={styles.expandText}>{expandedSections.education ? 'Hide' : 'Show'}</Text>
             </View>
           </TouchableOpacity>
@@ -1059,7 +1059,7 @@ export default function ProfileScreen() {
             </View>
             <View style={styles.collectionSectionMeta}>
               <Text style={styles.sectionCount}>
-                {renderCountLabel(profile.certifications.length, 'entry')}
+                {renderCountLabel(profile.certifications.length, 'entry', 'entries')}
               </Text>
               <Text style={styles.expandText}>{expandedSections.certifications ? 'Hide' : 'Show'}</Text>
             </View>
