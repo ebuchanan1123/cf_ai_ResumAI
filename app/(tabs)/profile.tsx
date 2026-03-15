@@ -529,7 +529,7 @@ export default function ProfileScreen() {
               onPress={() => togglePanel('import')}
             >
               <View style={[styles.compactCardHeader, isNarrowScreen && styles.compactCardHeaderNarrow]}>
-                <View>
+                <View style={styles.compactCardTextWrap}>
                   <Text style={styles.compactCardTitle}>Import From Pasted Resume</Text>
                   <Text style={styles.compactCardSubtitle}>
                     Paste an existing resume and merge it into your profile
