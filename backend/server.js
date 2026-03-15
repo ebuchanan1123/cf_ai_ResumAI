@@ -3,17 +3,53 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const OpenAI = require('openai');
-const rateLimit = require("express-rate-limit")
+const rateLimit = require('express-rate-limit');
 
 const app = express();
 const port = process.env.PORT || 3001;
 
-const limiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 30
-})
+app.set('trust proxy', 1);
 
-app.use(limiter);
+const createLimiter = ({ windowMs, max, message }) =>
+  rateLimit({
+    windowMs,
+    max,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: message },
+  });
+
+const generalLimiter = createLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  message: 'Too many requests from this IP. Please try again shortly.',
+});
+
+const resumeLimiter = createLimiter({
+  windowMs: 24 * 60 * 60 * 1000,
+  max: 20,
+  message: 'Resume generation limit reached for this IP today. Please try again tomorrow.',
+});
+
+const bulletLimiter = createLimiter({
+  windowMs: 24 * 60 * 60 * 1000,
+  max: 30,
+  message: 'Bullet generation limit reached for this IP today. Please try again tomorrow.',
+});
+
+const coverLetterLimiter = createLimiter({
+  windowMs: 24 * 60 * 60 * 1000,
+  max: 20,
+  message: 'Cover letter generation limit reached for this IP today. Please try again tomorrow.',
+});
+
+const profileImportLimiter = createLimiter({
+  windowMs: 24 * 60 * 60 * 1000,
+  max: 15,
+  message: 'Profile import limit reached for this IP today. Please try again tomorrow.',
+});
+
+app.use(generalLimiter);
 
 app.use(cors());
 app.use(express.json({ limit: '5mb' }));
@@ -33,7 +69,7 @@ app.get('/health', (req, res) => {
   });
 });
 
-app.post('/parse-profile', async (req, res) => {
+app.post('/parse-profile', profileImportLimiter, async (req, res) => {
   try {
     const { resumeText, existingProfile } = req.body;
 
@@ -140,7 +176,7 @@ ${resumeText}
   }
 });
 
-app.post('/generate', async (req, res) => {
+app.post('/generate', bulletLimiter, async (req, res) => {
   try {
     const { jobTitle, experience, tone, jobDescription } = req.body;
 
@@ -204,7 +240,7 @@ ${hasJobDescription ? `Target Job Description:\n${jobDescription}` : ''}
   }
 });
 
-app.post('/tailor-resume', async (req, res) => {
+app.post('/tailor-resume', resumeLimiter, async (req, res) => {
   try {
     const { profile, jobDescription, tone } = req.body;
 
@@ -319,7 +355,7 @@ ${jobDescription}
   }
 });
 
-app.post('/generate-cover-letter', async (req, res) => {
+app.post('/generate-cover-letter', coverLetterLimiter, async (req, res) => {
   try {
     const { profile, jobDescription, tone, companyContext, hiringManager } = req.body;
 

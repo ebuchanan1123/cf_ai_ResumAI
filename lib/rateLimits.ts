@@ -2,7 +2,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const RATE_LIMIT_STORAGE_KEY = 'resumai_daily_rate_limits';
 
-export type RateLimitKey = 'resume_generation' | 'bullet_generation';
+export type RateLimitKey =
+  | 'resume_generation'
+  | 'bullet_generation'
+  | 'cover_letter_generation';
 
 type StoredRateLimit = {
   count: number;
@@ -12,8 +15,9 @@ type StoredRateLimit = {
 type RateLimitStore = Partial<Record<RateLimitKey, StoredRateLimit>>;
 
 const DAILY_LIMITS: Record<RateLimitKey, number> = {
-  resume_generation: 100,
+  resume_generation: 5,
   bullet_generation: 5,
+  cover_letter_generation: 5,
 };
 
 const getLocalDateKey = () => {

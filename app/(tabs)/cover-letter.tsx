@@ -17,6 +17,12 @@ import * as Clipboard from 'expo-clipboard';
 
 import { API_URL } from '@/config/api';
 import { loadProfileFromStorage, type UserProfile } from '@/lib/profileStorage';
+import {
+  consumeDailyUsage,
+  getDailyUsage,
+  getLimitReachedMessage,
+  releaseDailyUsage,
+} from '@/lib/rateLimits';
 
 type Tone = 'Concise' | 'Technical' | 'Impact-focused';
 
@@ -69,9 +75,23 @@ export default function CoverLetterScreen() {
       return;
     }
 
+    let usageConsumed = false;
+
     try {
       setLoading(true);
       setCoverLetter('');
+
+      const usage = await getDailyUsage('cover_letter_generation');
+      if (usage.remaining === 0) {
+        Alert.alert(
+          'Daily limit reached',
+          getLimitReachedMessage('cover_letter_generation', 'cover letter generations')
+        );
+        return;
+      }
+
+      await consumeDailyUsage('cover_letter_generation');
+      usageConsumed = true;
 
       const res = await fetch(`${API_URL}/generate-cover-letter`, {
         method: 'POST',
@@ -95,6 +115,9 @@ export default function CoverLetterScreen() {
 
       setCoverLetter(data.coverLetter || '');
     } catch (err: any) {
+      if (usageConsumed) {
+        await releaseDailyUsage('cover_letter_generation');
+      }
       Alert.alert('Error', err.message || 'Something went wrong.');
     } finally {
       setLoading(false);

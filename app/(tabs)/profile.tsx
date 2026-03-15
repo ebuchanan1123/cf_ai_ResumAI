@@ -11,6 +11,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { API_URL } from '@/config/api';
 import {
@@ -30,6 +31,8 @@ type ExpandedPanel = 'basic' | 'summary' | 'import' | `item:${string}` | null;
 type CollectionSectionKey = 'experience' | 'projects' | 'education' | 'certifications';
 
 export default function ProfileScreen() {
+  const { width } = useWindowDimensions();
+  const isNarrowScreen = width < 430;
   const [profile, setProfile] = useState<UserProfile>(createEmptyProfile());
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -475,7 +478,10 @@ export default function ProfileScreen() {
       >
         <ScrollView
           style={styles.screen}
-          contentContainerStyle={styles.contentContainer}
+          contentContainerStyle={[
+            styles.contentContainer,
+            isNarrowScreen && styles.contentContainerNarrow,
+          ]}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="interactive"
         >
@@ -485,8 +491,8 @@ export default function ProfileScreen() {
             tailor stronger applications later.
           </Text>
 
-          <View style={styles.overviewCard}>
-            <View style={styles.overviewMain}>
+          <View style={[styles.overviewCard, isNarrowScreen && styles.overviewCardNarrow]}>
+            <View style={[styles.overviewMain, isNarrowScreen && styles.overviewMainNarrow]}>
               <Text style={styles.overviewEyebrow}>Profile Dashboard</Text>
               <Text style={styles.overviewTitle}>
                 {profile.fullName || 'Start building your profile'}
@@ -497,7 +503,7 @@ export default function ProfileScreen() {
                 {renderCountLabel(profile.education.length, 'education entry')}.
               </Text>
             </View>
-            <View style={styles.overviewBadge}>
+            <View style={[styles.overviewBadge, isNarrowScreen && styles.overviewBadgeNarrow]}>
               <Text style={styles.overviewBadgeNumber}>
                 {dashboardStats.reduce((sum, item) => sum + item.value, 0)}
               </Text>
@@ -507,7 +513,10 @@ export default function ProfileScreen() {
 
           <View style={styles.statsRow}>
             {dashboardStats.map((item) => (
-              <View key={item.label} style={styles.statChip}>
+              <View
+                key={item.label}
+                style={[styles.statChip, isNarrowScreen && styles.statChipNarrow]}
+              >
                 <Text style={styles.statChipValue}>{item.value}</Text>
                 <Text style={styles.statChipLabel}>{item.label}</Text>
               </View>
@@ -519,7 +528,7 @@ export default function ProfileScreen() {
               style={styles.compactCardHeaderButton}
               onPress={() => togglePanel('import')}
             >
-              <View style={styles.compactCardHeader}>
+              <View style={[styles.compactCardHeader, isNarrowScreen && styles.compactCardHeaderNarrow]}>
                 <View>
                   <Text style={styles.compactCardTitle}>Import From Pasted Resume</Text>
                   <Text style={styles.compactCardSubtitle}>
@@ -567,7 +576,7 @@ export default function ProfileScreen() {
                 style={styles.compactCardHeaderButton}
                 onPress={() => togglePanel('basic')}
               >
-                <View style={styles.compactCardHeader}>
+                <View style={[styles.compactCardHeader, isNarrowScreen && styles.compactCardHeaderNarrow]}>
                   <View>
                     <Text style={styles.compactCardTitle}>Basic Info</Text>
                     <Text style={styles.compactCardSubtitle}>
@@ -627,7 +636,7 @@ export default function ProfileScreen() {
                 style={styles.compactCardHeaderButton}
                 onPress={() => togglePanel('summary')}
               >
-                <View style={styles.compactCardHeader}>
+                <View style={[styles.compactCardHeader, isNarrowScreen && styles.compactCardHeaderNarrow]}>
                   <View>
                     <Text style={styles.compactCardTitle}>Summary & Skills</Text>
                     <Text style={styles.compactCardSubtitle}>
@@ -697,7 +706,7 @@ export default function ProfileScreen() {
               <Text style={styles.groupHeading}>Experience</Text>
               <Text style={styles.groupCaption}>Roles, internships, part-time work, and impact</Text>
             </View>
-            <View style={styles.collectionSectionMeta}>
+            <View style={[styles.collectionSectionMeta, isNarrowScreen && styles.collectionSectionMetaNarrow]}>
               <Text style={styles.sectionCount}>{renderCountLabel(profile.experience.length, 'entry', 'entries')}</Text>
               <Text style={styles.expandText}>{expandedSections.experience ? 'Hide' : 'Show'}</Text>
             </View>
@@ -723,7 +732,7 @@ export default function ProfileScreen() {
                       activeOpacity={0.95}
                       onPress={() => toggleItem(key)}
                     >
-                      <View style={styles.compactCardHeader}>
+                      <View style={[styles.compactCardHeader, isNarrowScreen && styles.compactCardHeaderNarrow]}>
                       <View style={styles.compactCardTextWrap}>
                           <Text style={styles.compactCardTitle}>{item.title || 'Untitled Role'}</Text>
                           <Text style={styles.compactCardSubtitle}>
@@ -829,7 +838,7 @@ export default function ProfileScreen() {
               <Text style={styles.groupHeading}>Projects</Text>
               <Text style={styles.groupCaption}>Personal builds, course work, and shipped ideas</Text>
             </View>
-            <View style={styles.collectionSectionMeta}>
+            <View style={[styles.collectionSectionMeta, isNarrowScreen && styles.collectionSectionMetaNarrow]}>
               <Text style={styles.sectionCount}>{renderCountLabel(profile.projects.length, 'entry', 'entries')}</Text>
               <Text style={styles.expandText}>{expandedSections.projects ? 'Hide' : 'Show'}</Text>
             </View>
@@ -855,7 +864,7 @@ export default function ProfileScreen() {
                       activeOpacity={0.95}
                       onPress={() => toggleItem(key)}
                     >
-                      <View style={styles.compactCardHeader}>
+                      <View style={[styles.compactCardHeader, isNarrowScreen && styles.compactCardHeaderNarrow]}>
                       <View style={styles.compactCardTextWrap}>
                           <Text style={styles.compactCardTitle}>{item.name || 'Untitled Project'}</Text>
                           <Text style={styles.compactCardSubtitle}>
@@ -941,7 +950,7 @@ export default function ProfileScreen() {
               <Text style={styles.groupHeading}>Education</Text>
               <Text style={styles.groupCaption}>Schools, degrees, coursework, and academic context</Text>
             </View>
-            <View style={styles.collectionSectionMeta}>
+            <View style={[styles.collectionSectionMeta, isNarrowScreen && styles.collectionSectionMetaNarrow]}>
               <Text style={styles.sectionCount}>{renderCountLabel(profile.education.length, 'entry', 'entries')}</Text>
               <Text style={styles.expandText}>{expandedSections.education ? 'Hide' : 'Show'}</Text>
             </View>
@@ -967,7 +976,7 @@ export default function ProfileScreen() {
                       activeOpacity={0.95}
                       onPress={() => toggleItem(key)}
                     >
-                      <View style={styles.compactCardHeader}>
+                      <View style={[styles.compactCardHeader, isNarrowScreen && styles.compactCardHeaderNarrow]}>
                       <View style={styles.compactCardTextWrap}>
                           <Text style={styles.compactCardTitle}>{item.school || 'Untitled Education'}</Text>
                           <Text style={styles.compactCardSubtitle}>
@@ -1065,7 +1074,7 @@ export default function ProfileScreen() {
               <Text style={styles.groupHeading}>Certifications</Text>
               <Text style={styles.groupCaption}>Credentials, licenses, and validation signals</Text>
             </View>
-            <View style={styles.collectionSectionMeta}>
+            <View style={[styles.collectionSectionMeta, isNarrowScreen && styles.collectionSectionMetaNarrow]}>
               <Text style={styles.sectionCount}>
                 {renderCountLabel(profile.certifications.length, 'entry', 'entries')}
               </Text>
@@ -1093,7 +1102,7 @@ export default function ProfileScreen() {
                     activeOpacity={0.95}
                     onPress={() => toggleItem(key)}
                   >
-                    <View style={styles.compactCardHeader}>
+                    <View style={[styles.compactCardHeader, isNarrowScreen && styles.compactCardHeaderNarrow]}>
                       <View style={styles.compactCardTextWrap}>
                         <Text style={styles.compactCardTitle}>
                           {item.name || 'Untitled Certification'}
@@ -1231,6 +1240,10 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 180,
     },
+    contentContainerNarrow: {
+    paddingHorizontal: 14,
+    paddingBottom: 140,
+    },
     loadingWrap: {
     flex: 1,
     justifyContent: 'center',
@@ -1269,9 +1282,16 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 2,
     },
+    overviewCardNarrow: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    },
     overviewMain: {
     flex: 1,
     paddingRight: 12,
+    },
+    overviewMainNarrow: {
+    paddingRight: 0,
     },
     overviewEyebrow: {
     color: '#2563EB',
@@ -1301,6 +1321,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#BFDBFE',
     },
+    overviewBadgeNarrow: {
+    marginTop: 14,
+    alignSelf: 'flex-start',
+    },
     overviewBadgeNumber: {
     color: '#1D4ED8',
     fontSize: 28,
@@ -1326,6 +1350,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E2E8F0',
     minWidth: '23%',
+    },
+    statChipNarrow: {
+    width: '48%',
+    minWidth: 0,
     },
     statChipValue: {
     color: '#1E293B',
@@ -1365,6 +1393,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    },
+    compactCardHeaderNarrow: {
+    alignItems: 'flex-start',
     },
     compactCardHeaderButton: {
     borderRadius: 12,
@@ -1421,6 +1452,10 @@ const styles = StyleSheet.create({
     collectionSectionMeta: {
     alignItems: 'flex-end',
     gap: 4,
+    },
+    collectionSectionMetaNarrow: {
+    flexShrink: 0,
+    marginLeft: 8,
     },
     label: {
     color: '#1E293B',
@@ -1490,6 +1525,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderWidth: 1,
     borderColor: '#BFDBFE',
+    flexShrink: 1,
     },
     addActionButtonText: {
     color: '#1D4ED8',
