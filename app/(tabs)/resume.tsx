@@ -1319,6 +1319,8 @@ ${cert.details || ''}`.trim()
         const marginTop = 42;
         const marginBottom = 42;
         const contentWidth = pageWidth - marginX * 2;
+        const bodyX = marginX + 10;
+        const bodyContentWidth = contentWidth - 20;
         const sectionGap = 8;
         const sectionContentGap = 12;
         const itemGap = 10;
@@ -1379,7 +1381,7 @@ ${cert.details || ''}`.trim()
         };
 
         const drawMetaLine = (text: string) => {
-          drawWrappedText(text, marginX, contentWidth, {
+          drawWrappedText(text, bodyX, bodyContentWidth, {
             fontSize: 9.5,
             lineGap: 12,
             color: [85, 85, 85],
@@ -1429,14 +1431,17 @@ ${cert.details || ''}`.trim()
 
         const drawBulletList = (bullets: string[]) => {
           bullets.filter(Boolean).forEach((bullet) => {
-            const bulletLines = pdf.splitTextToSize(bullet.trim(), contentWidth - bulletIndent - 6);
+            const bulletLines = pdf.splitTextToSize(
+              bullet.trim(),
+              bodyContentWidth - bulletIndent - 10
+            );
             ensureSpace(bulletLines.length * lineHeight + 2);
             pdf.setFont(theme.font, 'normal');
             pdf.setFontSize(10.5);
             setTextColor(theme.accentColor);
-            pdf.text('\u2022', marginX, y);
+            pdf.text('\u2022', bodyX, y);
             setTextColor(theme.textColor);
-            pdf.text(bulletLines, marginX + bulletIndent, y);
+            pdf.text(bulletLines, bodyX + bulletIndent, y);
             y += bulletLines.length * lineHeight;
             y += 2;
           });
@@ -1457,7 +1462,7 @@ ${cert.details || ''}`.trim()
         }) => {
           ensureSpace(42);
           if (title?.trim()) {
-            drawWrappedText(title, marginX, contentWidth, {
+            drawWrappedText(title, bodyX, bodyContentWidth, {
               fontSize: 11.5,
               lineGap: 14,
               color: theme.headingColor,
@@ -1465,7 +1470,7 @@ ${cert.details || ''}`.trim()
             });
           }
           if (subtitle?.trim()) {
-            drawWrappedText(subtitle, marginX, contentWidth, {
+            drawWrappedText(subtitle, bodyX, bodyContentWidth, {
               fontSize: 10.5,
               lineGap: 13,
               color: theme.textColor,
@@ -1477,7 +1482,7 @@ ${cert.details || ''}`.trim()
             y += 5;
           }
           if (details?.trim()) {
-            drawWrappedText(details, marginX, contentWidth, { fontSize: 10, lineGap: 13 });
+            drawWrappedText(details, bodyX, bodyContentWidth, { fontSize: 10, lineGap: 13 });
           }
           if (bullets?.length) {
             drawBulletList(bullets);
@@ -1500,7 +1505,7 @@ ${cert.details || ''}`.trim()
 
         drawSectionTitle('SUMMARY');
         y += sectionContentGap;
-        drawWrappedText(result.summary, marginX, contentWidth, { fontSize: 10.5, lineGap: 14 });
+        drawWrappedText(result.summary, bodyX, bodyContentWidth, { fontSize: 10.5, lineGap: 14 });
         y += 4;
 
         if (result.education.length) {
@@ -1519,7 +1524,7 @@ ${cert.details || ''}`.trim()
         if (result.skills.length) {
           drawSectionTitle('SKILLS');
           y += sectionContentGap;
-          drawWrappedText(result.skills.join(', '), marginX, contentWidth, {
+          drawWrappedText(result.skills.join(', '), bodyX, bodyContentWidth, {
             fontSize: 10.5,
             lineGap: 14,
           });
@@ -1725,22 +1730,64 @@ ${cert.details || ''}`.trim()
   };
 
   const renderResultContent = () => {
+    const savedVersionsSection = (
+      <SectionShell title="Saved Resume Versions" sectionKey="saved">
+        {savedVersions.length === 0 ? (
+          <Text style={[styles.resultBody, { marginTop: 10 }]}>
+            No saved resume versions yet.
+          </Text>
+        ) : (
+          savedVersions.map((version) => (
+            <View key={version.id} style={styles.savedVersionCard}>
+              <Text style={styles.savedVersionTitle}>{version.title}</Text>
+              <Text style={styles.savedVersionMeta}>
+                {version.profileName} • {version.tone} •{' '}
+                {new Date(version.createdAt).toLocaleDateString()}
+              </Text>
+
+              <View style={styles.savedVersionActions}>
+                <TouchableOpacity
+                  style={styles.savedVersionButton}
+                  onPress={() => loadVersionIntoEditor(version)}
+                >
+                  <Text style={styles.savedVersionButtonText}>Load</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.savedVersionDeleteButton}
+                  onPress={() => deleteVersion(version.id)}
+                >
+                  <Text style={styles.savedVersionDeleteButtonText}>Delete</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ))
+        )}
+      </SectionShell>
+    );
+
     if (loading) {
       return (
-        <View style={styles.loadingPanel}>
-          <ActivityIndicator size="large" />
-          <Text style={styles.loadingText}>Building your tailored resume...</Text>
-        </View>
+        <>
+          {savedVersionsSection}
+          <View style={styles.loadingPanel}>
+            <ActivityIndicator size="large" />
+            <Text style={styles.loadingText}>Building your tailored resume...</Text>
+          </View>
+        </>
       );
     }
 
     if (!result) {
       return (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyStateText}>
-            Your generated summary, skills, experience, projects, and keyword suggestions will appear here.
-          </Text>
-        </View>
+        <>
+          {savedVersionsSection}
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyStateText}>
+              Your generated summary, skills, experience, projects, and keyword suggestions will appear here.
+            </Text>
+          </View>
+        </>
       );
     }
 
@@ -1786,39 +1833,8 @@ ${cert.details || ''}`.trim()
           </View>
         </View>
 
-        <SectionShell title="Saved Resume Versions" sectionKey="saved">
-          {savedVersions.length === 0 ? (
-            <Text style={[styles.resultBody, { marginTop: 10 }]}>
-              No saved resume versions yet.
-            </Text>
-          ) : (
-            savedVersions.map((version) => (
-              <View key={version.id} style={styles.savedVersionCard}>
-                <Text style={styles.savedVersionTitle}>{version.title}</Text>
-                <Text style={styles.savedVersionMeta}>
-                  {version.profileName} • {version.tone} •{' '}
-                  {new Date(version.createdAt).toLocaleDateString()}
-                </Text>
+        {savedVersionsSection}
 
-                <View style={styles.savedVersionActions}>
-                  <TouchableOpacity
-                    style={styles.savedVersionButton}
-                    onPress={() => loadVersionIntoEditor(version)}
-                  >
-                    <Text style={styles.savedVersionButtonText}>Load</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={styles.savedVersionDeleteButton}
-                    onPress={() => deleteVersion(version.id)}
-                  >
-                    <Text style={styles.savedVersionDeleteButtonText}>Delete</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ))
-          )}
-        </SectionShell>
 
         {atsInsights ? (
           <SectionShell
@@ -2496,6 +2512,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     marginTop: 4,
     marginBottom: 18,
+    marginHorizontal: -6,
   },
   pillButton: {
     backgroundColor: '#FFFFFF',
@@ -2523,6 +2540,8 @@ const styles = StyleSheet.create({
     borderColor: '#CBD5E1',
     borderRadius: 16,
     padding: 12,
+    marginHorizontal: 6,
+    marginBottom: 12,
   },
   styleCardActive: {
     borderColor: '#2563EB',

@@ -58,6 +58,17 @@ const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+const compactWhitespace = (value = '') => value.replace(/\s+/g, ' ').trim();
+
+const trimTextForModel = (value = '', maxChars = 4500) => {
+  const normalized = compactWhitespace(value);
+  if (normalized.length <= maxChars) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, maxChars).trim()}...`;
+};
+
 app.get('/', (req, res) => {
   res.json({ message: 'Backend is running' });
 });
@@ -255,10 +266,13 @@ app.post('/tailor-resume', resumeLimiter, async (req, res) => {
       });
     }
 
+    const trimmedJobDescription = trimTextForModel(jobDescription, 4500);
+    const compactProfileJson = JSON.stringify(profile);
+
     const prompt = `
 You are an expert technical resume writer.
 
-Your task is to generate a fully tailored resume from a user's structured profile and a target job description.
+Generate a tailored resume from the user's profile and the target job description.
 
 Return your answer in valid JSON only, with this exact structure:
 {
@@ -310,10 +324,10 @@ Rules:
 - Keep the tone: ${tone || 'Technical'}
 
 User Profile:
-${JSON.stringify(profile, null, 2)}
+${compactProfileJson}
 
 Target Job Description:
-${jobDescription}
+${trimmedJobDescription}
 `;
 
     const response = await client.responses.create({
