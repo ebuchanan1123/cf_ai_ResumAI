@@ -13,8 +13,8 @@ export default function RootLayout() {
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Header />
       <Stack initialRouteName="index" screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="index" />
-        <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="index" options={{ title: 'ResumAI | AI Resume Builder' }} />
+        <Stack.Screen name="(tabs)" options={{ title: 'ResumAI | AI Resume Builder' }} />
       </Stack>
       <StatusBar style="light" />
     </ThemeProvider>
