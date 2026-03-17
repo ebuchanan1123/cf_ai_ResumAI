@@ -118,6 +118,14 @@ export default function HomePage() {
             Build your profile once and generate stronger resumes every time you apply.
           </Text>
 
+          <View style={styles.privacyCard}>
+            <Text style={styles.privacyTitle}>Privacy note</Text>
+            <Text style={styles.privacyText}>
+              Your profile is stored locally on your device while you use ResumAI. We do not have
+              access to your saved resume data.
+            </Text>
+          </View>
+
           <Link href="/profile" asChild>
             <TouchableOpacity style={styles.primaryButton}>
               <Text style={styles.primaryButtonText}>Get Started</Text>
@@ -355,5 +363,29 @@ const styles = StyleSheet.create({
     lineHeight: 26,
     marginBottom: 20,
     maxWidth: 720,
+  },
+  privacyCard: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    marginBottom: 20,
+    width: '100%',
+    maxWidth: 720,
+  },
+  privacyTitle: {
+    color: '#1D4ED8',
+    fontSize: 13,
+    fontWeight: '800',
+    marginBottom: 6,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  privacyText: {
+    color: '#475569',
+    fontSize: 14,
+    lineHeight: 22,
   },
 });

@@ -19,7 +19,9 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import {
   createResumeVersion,
+  loadCurrentResumeDraft,
   loadSavedResumeVersions,
+  saveCurrentResumeDraft,
   saveResumeVersions,
   type SavedResumeVersion,
 } from '@/lib/resumeStorage';
@@ -321,6 +323,7 @@ export default function ResumeScreen() {
   const [saveTitle, setSaveTitle] = useState('');
   const [savingVersion, setSavingVersion] = useState(false);
   const [expandedEntryEditor, setExpandedEntryEditor] = useState<string | null>(null);
+  const [draftHydrated, setDraftHydrated] = useState(false);
 
   const [expandedSections, setExpandedSections] = useState<Record<ResultSectionKey, boolean>>({
     saved: false,
@@ -336,22 +339,49 @@ export default function ResumeScreen() {
   useEffect(() => {
     const loadInitialData = async () => {
       try {
-        const [storedProfile, storedVersions] = await Promise.all([
+        const [storedProfile, storedVersions, storedDraft] = await Promise.all([
           loadProfileFromStorage(),
           loadSavedResumeVersions(),
+          loadCurrentResumeDraft(),
         ]);
 
         setProfile(storedProfile);
         setSavedVersions(storedVersions);
+        setJobDescription(storedDraft.jobDescription || '');
+        setSaveTitle(storedDraft.saveTitle || '');
+        if (storedDraft.tone === 'Concise' || storedDraft.tone === 'Technical' || storedDraft.tone === 'Impact-focused') {
+          setTone(storedDraft.tone);
+        }
+        if (RESUME_STYLE_OPTIONS.some((option) => option.value === storedDraft.resumeStyle)) {
+          setResumeStyle(storedDraft.resumeStyle as ResumeStyle);
+        }
+        setResult(storedDraft.result || null);
       } catch {
         showAlert('Error', 'Failed to load profile or saved resumes.');
       } finally {
+        setDraftHydrated(true);
         setProfileLoading(false);
       }
     };
 
     loadInitialData();
   }, []);
+
+  useEffect(() => {
+    if (!draftHydrated) return;
+
+    const timeoutId = setTimeout(() => {
+      void saveCurrentResumeDraft({
+        jobDescription,
+        tone,
+        resumeStyle,
+        saveTitle,
+        result,
+      });
+    }, 250);
+
+    return () => clearTimeout(timeoutId);
+  }, [draftHydrated, jobDescription, tone, resumeStyle, saveTitle, result]);
 
   const toggleSection = (key: ResultSectionKey) => {
     setExpandedSections((prev) => ({
@@ -1729,91 +1759,161 @@ ${cert.details || ''}`.trim()
     );
   };
 
-  const renderResultContent = () => {
-    const savedVersionsSection = (
-      <SectionShell title="Saved Resume Versions" sectionKey="saved">
-        {savedVersions.length === 0 ? (
-          <Text style={[styles.resultBody, { marginTop: 10 }]}>
-            No saved resume versions yet.
-          </Text>
-        ) : (
-          savedVersions.map((version) => (
-            <View key={version.id} style={styles.savedVersionCard}>
-              <Text style={styles.savedVersionTitle}>{version.title}</Text>
-              <Text style={styles.savedVersionMeta}>
-                {version.profileName} • {version.tone} •{' '}
-                {new Date(version.createdAt).toLocaleDateString()}
-              </Text>
+  const renderSavedVersionsSection = () => (
+    <SectionShell title="Saved Resume Versions" sectionKey="saved">
+      {savedVersions.length === 0 ? (
+        <Text style={[styles.resultBody, { marginTop: 10 }]}>
+          No saved resume versions yet.
+        </Text>
+      ) : (
+        savedVersions.map((version) => (
+          <View key={version.id} style={styles.savedVersionCard}>
+            <Text style={styles.savedVersionTitle}>{version.title}</Text>
+            <Text style={styles.savedVersionMeta}>
+              {version.profileName} • {version.tone} •{' '}
+              {new Date(version.createdAt).toLocaleDateString()}
+            </Text>
 
-              <View style={styles.savedVersionActions}>
-                <TouchableOpacity
-                  style={styles.savedVersionButton}
-                  onPress={() => loadVersionIntoEditor(version)}
-                >
-                  <Text style={styles.savedVersionButtonText}>Load</Text>
-                </TouchableOpacity>
+            <View style={styles.savedVersionActions}>
+              <TouchableOpacity
+                style={styles.savedVersionButton}
+                onPress={() => loadVersionIntoEditor(version)}
+              >
+                <Text style={styles.savedVersionButtonText}>Load</Text>
+              </TouchableOpacity>
 
-                <TouchableOpacity
-                  style={styles.savedVersionDeleteButton}
-                  onPress={() => deleteVersion(version.id)}
-                >
-                  <Text style={styles.savedVersionDeleteButtonText}>Delete</Text>
-                </TouchableOpacity>
-              </View>
+              <TouchableOpacity
+                style={styles.savedVersionDeleteButton}
+                onPress={() => deleteVersion(version.id)}
+              >
+                <Text style={styles.savedVersionDeleteButtonText}>Delete</Text>
+              </TouchableOpacity>
             </View>
-          ))
-        )}
-      </SectionShell>
-    );
-
-    if (loading) {
-      return (
-        <>
-          {savedVersionsSection}
-          <View style={styles.loadingPanel}>
-            <ActivityIndicator size="large" />
-            <Text style={styles.loadingText}>Building your tailored resume...</Text>
           </View>
-        </>
-      );
-    }
+        ))
+      )}
+    </SectionShell>
+  );
 
-    if (!result) {
-      return (
-        <>
-          {savedVersionsSection}
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyStateText}>
-              Your generated summary, skills, experience, projects, and keyword suggestions will appear here.
+  const renderSaveVersionSection = () => {
+    if (!result) return null;
+
+    return (
+      <View style={styles.resultCard}>
+        <Text style={styles.resultTitle}>Save This Version</Text>
+        <TextInput
+          style={[styles.input, styles.saveTitleInput]}
+          value={saveTitle}
+          onChangeText={setSaveTitle}
+          placeholder="e.g. Shopify SWE Intern Resume"
+          placeholderTextColor="#8C8C8C"
+        />
+
+        <View style={styles.actionRow}>
+          <TouchableOpacity
+            style={[styles.primaryButtonCompact, savingVersion && styles.disabledButton]}
+            onPress={saveCurrentVersion}
+            disabled={savingVersion}
+          >
+            <Text style={styles.primaryButtonCompactText}>
+              {savingVersion ? 'Saving...' : 'Save Version'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
+
+  const renderAtsSection = () => {
+    if (!atsInsights) return null;
+
+    return (
+      <SectionShell
+        title="ATS Match"
+        sectionKey="ats"
+        description="Estimated alignment against the pasted job description"
+      >
+        <View style={styles.atsSummaryRow}>
+          <View>
+            <Text style={[styles.atsScoreValue, atsInsights.score < 50
+              ? styles.atsScoreDanger
+              : atsInsights.score < 70
+                ? styles.atsScoreWarn
+                : atsInsights.score < 90
+                  ? styles.atsScoreGood
+                  : styles.atsScoreExcellent]}
+            >
+              {atsInsights.score}%
+            </Text>
+            <Text style={styles.atsScoreLabel}>{atsInsights.toneLabel}</Text>
+          </View>
+          <View style={styles.atsMetaWrap}>
+            <Text style={styles.atsMetaText}>
+              {atsInsights.matchedCount} matching keyword
+              {atsInsights.matchedCount === 1 ? '' : 's'} found
+            </Text>
+            <Text style={styles.atsMetaText}>
+              {atsInsights.suggestedKeywords.length} suggested keyword
+              {atsInsights.suggestedKeywords.length === 1 ? '' : 's'}
             </Text>
           </View>
-        </>
-      );
-    }
+        </View>
+
+        <View style={styles.atsTrack}>
+          <View
+            style={[
+              styles.atsTrackFill,
+              atsInsights.score < 50
+                ? styles.atsTrackFillDanger
+                : atsInsights.score < 70
+                  ? styles.atsTrackFillWarn
+                  : atsInsights.score < 90
+                    ? styles.atsTrackFillGood
+                    : styles.atsTrackFillExcellent,
+              { width: `${atsInsights.score}%` },
+            ]}
+          />
+        </View>
+
+        <Text style={styles.atsHintText}>
+          Add more of the role-specific language below if it truthfully matches your experience.
+        </Text>
+
+        <View style={styles.keywordChipRow}>
+          {atsInsights.suggestedKeywords.length > 0 ? (
+            atsInsights.suggestedKeywords.map((keyword) => (
+              <View key={keyword} style={styles.keywordChip}>
+                <Text style={styles.keywordChipText}>{formatKeywordLabel(keyword)}</Text>
+              </View>
+            ))
+          ) : (
+            <Text style={styles.resultBody}>
+              No obvious missing keywords right now. Your resume already covers the main language from the job post pretty well.
+            </Text>
+          )}
+        </View>
+      </SectionShell>
+    );
+  };
+
+  const renderOutputOverview = () => {
+    if (!result) return null;
 
     return (
       <>
         <View style={styles.resultCard}>
-          <Text style={styles.resultTitle}>Save This Version</Text>
-          <TextInput
-            style={styles.saveTitleInput}
-            value={saveTitle}
-            onChangeText={setSaveTitle}
-            placeholder="e.g. Shopify SWE Intern Resume"
-            placeholderTextColor="#8C8C8C"
-          />
+          <Text style={styles.resultTitle}>Export Style</Text>
+          <Text style={styles.exportHelperText}>
+            Switch styles any time. Your resume content stays the same, and you can export multiple versions without generating again.
+          </Text>
+
+          <View style={styles.styleGrid}>
+            {RESUME_STYLE_OPTIONS.map((option) => (
+              <ResumeStyleButton key={option.value} value={option.value} />
+            ))}
+          </View>
 
           <View style={styles.actionRow}>
-            <TouchableOpacity
-              style={[styles.primaryButtonCompact, savingVersion && styles.disabledButton]}
-              onPress={saveCurrentVersion}
-              disabled={savingVersion}
-            >
-              <Text style={styles.primaryButtonCompactText}>
-                {savingVersion ? 'Saving...' : 'Save Version'}
-              </Text>
-            </TouchableOpacity>
-
             <TouchableOpacity
               style={styles.secondaryButtonCompact}
               onPress={copyFullResume}
@@ -1832,78 +1932,25 @@ ${cert.details || ''}`.trim()
             </TouchableOpacity>
           </View>
         </View>
+      </>
+    );
+  };
 
-        {savedVersionsSection}
+  const renderEditorWorkspaceIntro = () => (
+    <View style={styles.editorWorkspaceHeader}>
+      <Text style={styles.sectionEyebrow}>Generated Resume</Text>
+      <Text style={styles.editorWorkspaceTitle}>Edit Your Resume</Text>
+      <Text style={styles.editorWorkspaceSubtitle}>
+        Open any section below to refine the generated content, then export the version you want.
+      </Text>
+    </View>
+  );
 
+  const renderEditorSections = () => {
+    if (!result) return null;
 
-        {atsInsights ? (
-          <SectionShell
-            title="ATS Match"
-            sectionKey="ats"
-            description="Estimated alignment against the pasted job description"
-          >
-            <View style={styles.atsSummaryRow}>
-              <View>
-                <Text style={[styles.atsScoreValue, atsInsights.score < 50
-                  ? styles.atsScoreDanger
-                  : atsInsights.score < 70
-                    ? styles.atsScoreWarn
-                    : atsInsights.score < 90
-                      ? styles.atsScoreGood
-                      : styles.atsScoreExcellent]}
-                >
-                  {atsInsights.score}%
-                </Text>
-                <Text style={styles.atsScoreLabel}>{atsInsights.toneLabel}</Text>
-              </View>
-              <View style={styles.atsMetaWrap}>
-                <Text style={styles.atsMetaText}>
-                  {atsInsights.matchedCount} matching keyword
-                  {atsInsights.matchedCount === 1 ? '' : 's'} found
-                </Text>
-                <Text style={styles.atsMetaText}>
-                  {atsInsights.suggestedKeywords.length} suggested keyword
-                  {atsInsights.suggestedKeywords.length === 1 ? '' : 's'}
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.atsTrack}>
-              <View
-                style={[
-                  styles.atsTrackFill,
-                  atsInsights.score < 50
-                    ? styles.atsTrackFillDanger
-                    : atsInsights.score < 70
-                      ? styles.atsTrackFillWarn
-                      : atsInsights.score < 90
-                        ? styles.atsTrackFillGood
-                        : styles.atsTrackFillExcellent,
-                  { width: `${atsInsights.score}%` },
-                ]}
-              />
-            </View>
-
-            <Text style={styles.atsHintText}>
-              Add more of the role-specific language below if it truthfully matches your experience.
-            </Text>
-
-            <View style={styles.keywordChipRow}>
-              {atsInsights.suggestedKeywords.length > 0 ? (
-                atsInsights.suggestedKeywords.map((keyword) => (
-                  <View key={keyword} style={styles.keywordChip}>
-                    <Text style={styles.keywordChipText}>{formatKeywordLabel(keyword)}</Text>
-                  </View>
-                ))
-              ) : (
-                <Text style={styles.resultBody}>
-                  No obvious missing keywords right now. Your resume already covers the main language from the job post pretty well.
-                </Text>
-              )}
-            </View>
-          </SectionShell>
-        ) : null}
-
+    return (
+      <>
         <SectionShell
           title="Summary"
           sectionKey="summary"
@@ -2178,6 +2225,44 @@ ${cert.details || ''}`.trim()
     );
   };
 
+  const renderResultContent = (includeSavedVersions = true) => {
+    const savedVersionsSection = includeSavedVersions ? renderSavedVersionsSection() : null;
+
+    if (loading) {
+      return (
+        <>
+          {savedVersionsSection}
+          <View style={styles.loadingPanel}>
+            <ActivityIndicator size="large" />
+            <Text style={styles.loadingText}>Building your tailored resume...</Text>
+          </View>
+        </>
+      );
+    }
+
+    if (!result) {
+      return (
+        <>
+          {savedVersionsSection}
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyStateText}>
+              Your generated summary, skills, experience, projects, and keyword suggestions will appear here.
+            </Text>
+          </View>
+        </>
+      );
+    }
+
+      return (
+        <>
+          {savedVersionsSection}
+          {renderOutputOverview()}
+          {renderAtsSection()}
+          {renderEditorSections()}
+        </>
+      );
+  };
+
   if (profileLoading) {
     return (
       <SafeAreaView style={styles.safeArea}>
@@ -2194,6 +2279,13 @@ ${cert.details || ''}`.trim()
     !profile?.skills &&
     (!profile?.experience || profile.experience.every((item) => !item.company && !item.title)) &&
     (!profile?.projects || profile.projects.every((item) => !item.name));
+
+  const setupStats = [
+    { label: 'Experience', value: profile?.experience?.length ?? 0 },
+    { label: 'Projects', value: profile?.projects?.length ?? 0 },
+    { label: 'Education', value: profile?.education?.length ?? 0 },
+    { label: 'Saved', value: savedVersions.length },
+  ];
 
   const contentContainerStyle = StyleSheet.flatten([
     styles.contentContainer,
@@ -2221,72 +2313,133 @@ ${cert.details || ''}`.trim()
           </View>
 
           {isDesktop ? (
-            <View style={styles.desktopGrid}>
-              <View style={styles.desktopLeft}>
-                <View style={styles.sectionCard}>
-                  <View style={styles.profileStatusHeader}>
-                    <Text style={styles.sectionTitle}>Profile Status</Text>
-                    <TouchableOpacity style={styles.smallButton} onPress={reloadProfile}>
-                      <Text style={styles.smallButtonText}>Reload</Text>
-                    </TouchableOpacity>
+            <>
+              <View style={styles.desktopGrid}>
+                <View style={styles.desktopLeft}>
+                  <View style={styles.sectionCard}>
+                    <View style={styles.profileStatusHeader}>
+                      <View>
+                        <Text style={styles.sectionEyebrow}>Campaign Setup</Text>
+                        <Text style={styles.sectionTitle}>Resume Campaign</Text>
+                      </View>
+                      <TouchableOpacity style={styles.smallButton} onPress={reloadProfile}>
+                        <Text style={styles.smallButtonText}>Reload</Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    <Text style={styles.statusText}>
+                      {profileLooksEmpty
+                        ? 'Your profile looks mostly empty. Fill out the Profile page first for better results.'
+                        : `Using saved profile for ${profile?.fullName || 'this user'}.`}
+                    </Text>
+
+                    <View style={styles.setupStatsRow}>
+                      {setupStats.map((item) => (
+                        <View key={item.label} style={styles.setupStatChip}>
+                          <Text style={styles.setupStatValue}>{item.value}</Text>
+                          <Text style={styles.setupStatLabel}>{item.label}</Text>
+                        </View>
+                      ))}
+                    </View>
+
+                    <View style={styles.setupHintCard}>
+                      <Text style={styles.setupHintTitle}>Workflow</Text>
+                      <Text style={styles.setupHintText}>
+                        Paste a role on the left, generate once, then explore ATS feedback, styles,
+                        and exports on the right.
+                      </Text>
+                    </View>
                   </View>
 
-                  <Text style={styles.statusText}>
-                    {profileLooksEmpty
-                      ? 'Your profile looks mostly empty. Fill out the Profile page first for better results.'
-                      : `Using saved profile for ${profile?.fullName || 'this user'}.`}
-                  </Text>
+                  <View style={styles.sectionCard}>
+                    <Text style={styles.sectionEyebrow}>Role Input</Text>
+                    <Text style={styles.sectionTitle}>Target Job Description</Text>
+                    <Text style={styles.sectionSupportText}>
+                      Add the job posting you want to target. ResumAI will tailor your resume around the most relevant language and requirements.
+                    </Text>
+                    <TextInput
+                      style={[styles.input, styles.jobDescriptionArea]}
+                      multiline
+                      value={jobDescription}
+                      onChangeText={setJobDescription}
+                      placeholder="Paste the internship job description here..."
+                      placeholderTextColor="#8C8C8C"
+                      textAlignVertical="top"
+                    />
+
+                    <Text style={styles.label}>Tone</Text>
+                    <View style={styles.pillRow}>
+                      <ToneButton value="Concise" />
+                      <ToneButton value="Technical" />
+                      <ToneButton value="Impact-focused" />
+                    </View>
+
+                    <View style={styles.actionRow}>
+                      <TouchableOpacity
+                        style={[styles.primaryButtonCompact, loading && styles.disabledButton]}
+                        onPress={tailorResume}
+                        disabled={loading}
+                      >
+                        <Text style={styles.primaryButtonCompactText}>
+                          {loading ? 'Generating...' : 'Generate Resume'}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+
+                  </View>
                 </View>
 
-                <View style={styles.sectionCard}>
-                  <Text style={styles.sectionTitle}>Target Job Description</Text>
-                  <TextInput
-                    style={[styles.input, styles.jobDescriptionArea]}
-                    multiline
-                    value={jobDescription}
-                    onChangeText={setJobDescription}
-                    placeholder="Paste the internship job description here..."
-                    placeholderTextColor="#8C8C8C"
-                    textAlignVertical="top"
-                  />
-
-                  <Text style={styles.label}>Tone</Text>
-                  <View style={styles.pillRow}>
-                    <ToneButton value="Concise" />
-                    <ToneButton value="Technical" />
-                    <ToneButton value="Impact-focused" />
-                  </View>
-
-                  <Text style={styles.label}>Resume Style</Text>
-                  <View style={styles.styleGrid}>
-                    {RESUME_STYLE_OPTIONS.map((option) => (
-                      <ResumeStyleButton key={option.value} value={option.value} />
-                    ))}
-                  </View>
-
-                  <View style={styles.actionRow}>
-                    <TouchableOpacity
-                      style={[styles.primaryButtonCompact, loading && styles.disabledButton]}
-                      onPress={tailorResume}
-                      disabled={loading}
-                    >
-                      <Text style={styles.primaryButtonCompactText}>
-                        {loading ? 'Generating...' : 'Generate Resume'}
+                <View style={styles.desktopRight}>
+                  {result ? (
+                    <View style={styles.outputStudioHeader}>
+                      <Text style={styles.sectionEyebrow}>Output Studio</Text>
+                      <Text style={styles.outputStudioTitle}>Review, Export, and Fine-Tune</Text>
+                      <Text style={styles.outputStudioSubtitle}>
+                        Compare ATS fit, switch styles, and save polished versions before editing the details below.
                       </Text>
-                    </TouchableOpacity>
-                  </View>
+                    </View>
+                  ) : null}
 
+                  {loading ? (
+                    <View style={styles.loadingPanel}>
+                      <ActivityIndicator size="large" />
+                      <Text style={styles.loadingText}>Building your tailored resume...</Text>
+                    </View>
+                  ) : result ? (
+                    renderOutputOverview()
+                  ) : (
+                    <View style={styles.emptyState}>
+                      <Text style={styles.emptyStateText}>
+                        Your generated summary, skills, experience, projects, and keyword suggestions will appear here.
+                      </Text>
+                    </View>
+                  )}
                 </View>
               </View>
 
-              <View style={styles.desktopRight}>{renderResultContent()}</View>
-            </View>
+              {isDesktop && !loading ? (
+                <View style={styles.desktopBottomStack}>
+                  {renderAtsSection()}
+                  {renderSaveVersionSection()}
+                  {renderSavedVersionsSection()}
+                  {result ? (
+                    <>
+                      {renderEditorWorkspaceIntro()}
+                      {renderEditorSections()}
+                    </>
+                  ) : null}
+                </View>
+              ) : null}
+            </>
           ) : (
             <View style={styles.mobileStack}>
               <View style={styles.mobileStackSection}>
                 <View style={styles.sectionCard}>
                   <View style={styles.profileStatusHeader}>
-                    <Text style={styles.sectionTitle}>Profile Status</Text>
+                    <View>
+                      <Text style={styles.sectionEyebrow}>Campaign Setup</Text>
+                      <Text style={styles.sectionTitle}>Resume Campaign</Text>
+                    </View>
                     <TouchableOpacity style={styles.smallButton} onPress={reloadProfile}>
                       <Text style={styles.smallButtonText}>Reload</Text>
                     </TouchableOpacity>
@@ -2297,10 +2450,23 @@ ${cert.details || ''}`.trim()
                       ? 'Your profile looks mostly empty. Fill out the Profile page first for better results.'
                       : `Using saved profile for ${profile?.fullName || 'this user'}.`}
                   </Text>
+
+                  <View style={styles.setupStatsRow}>
+                    {setupStats.map((item) => (
+                      <View key={item.label} style={styles.setupStatChip}>
+                        <Text style={styles.setupStatValue}>{item.value}</Text>
+                        <Text style={styles.setupStatLabel}>{item.label}</Text>
+                      </View>
+                    ))}
+                  </View>
                 </View>
 
                 <View style={styles.sectionCard}>
+                  <Text style={styles.sectionEyebrow}>Role Input</Text>
                   <Text style={styles.sectionTitle}>Target Job Description</Text>
+                  <Text style={styles.sectionSupportText}>
+                    Add the job posting you want to target. ResumAI will tailor your resume around the most relevant language and requirements.
+                  </Text>
                   <TextInput
                     style={[styles.input, styles.jobDescriptionArea, styles.jobDescriptionAreaCompact]}
                     multiline
@@ -2318,13 +2484,6 @@ ${cert.details || ''}`.trim()
                     <ToneButton value="Impact-focused" />
                   </View>
 
-                  <Text style={styles.label}>Resume Style</Text>
-                  <View style={styles.styleGrid}>
-                    {RESUME_STYLE_OPTIONS.map((option) => (
-                      <ResumeStyleButton key={option.value} value={option.value} />
-                    ))}
-                  </View>
-
                   <View style={styles.actionRow}>
                     <TouchableOpacity
                       style={[styles.primaryButtonCompact, loading && styles.disabledButton]}
@@ -2340,7 +2499,10 @@ ${cert.details || ''}`.trim()
                 </View>
               </View>
 
-              <View style={styles.mobileStackSection}>{renderResultContent()}</View>
+              <View style={styles.mobileStackSection}>
+                {result && !loading ? renderEditorWorkspaceIntro() : null}
+                {renderResultContent(true)}
+              </View>
             </View>
           )}
         </ScrollView>
@@ -2382,13 +2544,41 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   desktopLeft: {
-    flex: 0.95,
+    flex: 1,
     minWidth: 0,
     marginRight: 24,
   },
   desktopRight: {
-    flex: 1.1,
+    flex: 1.04,
     minWidth: 0,
+  },
+  desktopBottomStack: {
+    width: '100%',
+    marginTop: 8,
+  },
+  outputStudioHeader: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 18,
+    padding: 18,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 1,
+  },
+  outputStudioTitle: {
+    color: '#1E293B',
+    fontSize: 22,
+    fontWeight: '800',
+  },
+  outputStudioSubtitle: {
+    color: '#64748B',
+    fontSize: 14,
+    lineHeight: 21,
+    marginTop: 8,
   },
   mobileStack: {
     width: '100%',
@@ -2446,15 +2636,29 @@ const styles = StyleSheet.create({
     elevation: 2,
     width: '100%',
   },
+  sectionEyebrow: {
+    color: '#2563EB',
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+    marginBottom: 6,
+  },
   sectionTitle: {
     color: '#1E293B',
     fontSize: 20,
     fontWeight: '800',
   },
+  sectionSupportText: {
+    color: '#64748B',
+    fontSize: 14,
+    lineHeight: 21,
+    marginTop: 8,
+  },
   profileStatusHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
   },
   smallButton: {
     backgroundColor: '#EFF6FF',
@@ -2474,6 +2678,54 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
     marginTop: 12,
+  },
+  setupStatsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 16,
+    marginHorizontal: -5,
+  },
+  setupStatChip: {
+    minWidth: 92,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    marginHorizontal: 5,
+    marginBottom: 10,
+  },
+  setupStatValue: {
+    color: '#1E293B',
+    fontSize: 22,
+    fontWeight: '800',
+  },
+  setupStatLabel: {
+    color: '#64748B',
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 4,
+  },
+  setupHintCard: {
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    marginTop: 6,
+  },
+  setupHintTitle: {
+    color: '#1D4ED8',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  setupHintText: {
+    color: '#1E40AF',
+    fontSize: 13,
+    lineHeight: 20,
+    marginTop: 6,
   },
   label: {
     color: '#1E293B',
@@ -2521,6 +2773,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 999,
+    marginRight: 12,
+    marginBottom: 10,
   },
   pillButtonActive: {
     backgroundColor: '#2563EB',
@@ -2680,7 +2934,7 @@ const styles = StyleSheet.create({
   resultTitle: {
     color: '#1E293B',
     fontWeight: '800',
-    fontSize: 15,
+    fontSize: 24,
   },
   resultHeaderDescription: {
     color: '#64748B',
@@ -2702,11 +2956,43 @@ const styles = StyleSheet.create({
   },
   saveTitleInput: {
     marginTop: 12,
+    marginBottom: 12,
   },
   resultBody: {
     color: '#1E293B',
     fontSize: 15,
     lineHeight: 23,
+  },
+  exportHelperText: {
+    color: '#64748B',
+    fontSize: 14,
+    lineHeight: 21,
+    marginTop: 8,
+    marginBottom: 14,
+  },
+  editorWorkspaceHeader: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 18,
+    padding: 18,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 1,
+  },
+  editorWorkspaceTitle: {
+    color: '#1E293B',
+    fontSize: 24,
+    fontWeight: '800',
+  },
+  editorWorkspaceSubtitle: {
+    color: '#64748B',
+    fontSize: 14,
+    lineHeight: 21,
+    marginTop: 8,
   },
   editorItemCard: {
     marginTop: 12,

@@ -16,6 +16,7 @@ import {
 import * as Clipboard from 'expo-clipboard';
 
 import { API_URL } from '@/config/api';
+import { loadCoverLetterDraft, saveCoverLetterDraft } from '@/lib/generationDraftStorage';
 import { loadProfileFromStorage, type UserProfile } from '@/lib/profileStorage';
 import {
   consumeDailyUsage,
@@ -38,21 +39,49 @@ export default function CoverLetterScreen() {
   const [tone, setTone] = useState<Tone>('Technical');
   const [loading, setLoading] = useState(false);
   const [coverLetter, setCoverLetter] = useState('');
+  const [draftHydrated, setDraftHydrated] = useState(false);
 
   useEffect(() => {
     const loadProfile = async () => {
       try {
-        const storedProfile = await loadProfileFromStorage();
+        const [storedProfile, storedDraft] = await Promise.all([
+          loadProfileFromStorage(),
+          loadCoverLetterDraft(),
+        ]);
         setProfile(storedProfile);
+        setJobDescription(storedDraft.jobDescription || '');
+        setCompanyContext(storedDraft.companyContext || '');
+        setHiringManager(storedDraft.hiringManager || '');
+        if (storedDraft.tone === 'Concise' || storedDraft.tone === 'Technical' || storedDraft.tone === 'Impact-focused') {
+          setTone(storedDraft.tone);
+        }
+        setCoverLetter(storedDraft.coverLetter || '');
       } catch {
         Alert.alert('Error', 'Failed to load profile.');
       } finally {
+        setDraftHydrated(true);
         setProfileLoading(false);
       }
     };
 
     loadProfile();
   }, []);
+
+  useEffect(() => {
+    if (!draftHydrated) return;
+
+    const timeoutId = setTimeout(() => {
+      void saveCoverLetterDraft({
+        jobDescription,
+        companyContext,
+        hiringManager,
+        tone,
+        coverLetter,
+      });
+    }, 250);
+
+    return () => clearTimeout(timeoutId);
+  }, [draftHydrated, jobDescription, companyContext, hiringManager, tone, coverLetter]);
 
   const reloadProfile = async () => {
     try {

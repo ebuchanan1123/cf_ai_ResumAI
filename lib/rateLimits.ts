@@ -15,7 +15,7 @@ type StoredRateLimit = {
 type RateLimitStore = Partial<Record<RateLimitKey, StoredRateLimit>>;
 
 const DAILY_LIMITS: Record<RateLimitKey, number> = {
-  resume_generation: 5,
+  resume_generation: 50,
   bullet_generation: 5,
   cover_letter_generation: 5,
 };

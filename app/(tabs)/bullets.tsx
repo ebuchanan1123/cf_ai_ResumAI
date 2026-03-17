@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -17,6 +17,7 @@ import {
 import * as Clipboard from 'expo-clipboard';
 
 import { API_URL } from '@/config/api';
+import { loadBulletDraft, saveBulletDraft } from '@/lib/generationDraftStorage';
 import {
   consumeDailyUsage,
   getDailyUsage,
@@ -33,11 +34,47 @@ export default function HomeScreen() {
   const [tone, setTone] = useState<Tone>('Technical');
   const [bullets, setBullets] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+  const [draftHydrated, setDraftHydrated] = useState(false);
 
   const scrollViewRef = useRef<ScrollView | null>(null);
   const bulletRefs = useRef<Record<number, View | null>>({});
 
+  useEffect(() => {
+    const loadDraft = async () => {
+      try {
+        const storedDraft = await loadBulletDraft();
+        setJobTitle(storedDraft.jobTitle || '');
+        setExperience(storedDraft.experience || '');
+        setJobDescription(storedDraft.jobDescription || '');
+        if (storedDraft.tone === 'Concise' || storedDraft.tone === 'Technical' || storedDraft.tone === 'Impact-focused') {
+          setTone(storedDraft.tone);
+        }
+        setBullets(Array.isArray(storedDraft.bullets) ? storedDraft.bullets : []);
+      } catch {
+        Alert.alert('Error', 'Failed to load your saved bullet draft.');
+      } finally {
+        setDraftHydrated(true);
+      }
+    };
 
+    void loadDraft();
+  }, []);
+
+  useEffect(() => {
+    if (!draftHydrated) return;
+
+    const timeoutId = setTimeout(() => {
+      void saveBulletDraft({
+        jobTitle,
+        experience,
+        jobDescription,
+        tone,
+        bullets,
+      });
+    }, 250);
+
+    return () => clearTimeout(timeoutId);
+  }, [draftHydrated, jobTitle, experience, jobDescription, tone, bullets]);
 
   const generate = async () => {
     if (!jobTitle.trim() || experience.trim().length < 20) {

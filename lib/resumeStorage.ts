@@ -47,6 +47,23 @@ export type SavedResumeVersion = {
 };
 
 const RESUME_VERSIONS_KEY = 'resumai_saved_resume_versions';
+const CURRENT_RESUME_DRAFT_KEY = 'resumai_current_resume_draft';
+
+export type ResumeDraft = {
+  jobDescription: string;
+  tone: string;
+  resumeStyle: string;
+  saveTitle: string;
+  result: TailoredResumeResponse | null;
+};
+
+const createEmptyResumeDraft = (): ResumeDraft => ({
+  jobDescription: '',
+  tone: 'Technical',
+  resumeStyle: 'Classic',
+  saveTitle: '',
+  result: null,
+});
 
 export const loadSavedResumeVersions = async (): Promise<SavedResumeVersion[]> => {
   const raw = await AsyncStorage.getItem(RESUME_VERSIONS_KEY);
@@ -63,6 +80,33 @@ export const loadSavedResumeVersions = async (): Promise<SavedResumeVersion[]> =
 
 export const saveResumeVersions = async (versions: SavedResumeVersion[]) => {
   await AsyncStorage.setItem(RESUME_VERSIONS_KEY, JSON.stringify(versions));
+};
+
+export const loadCurrentResumeDraft = async (): Promise<ResumeDraft> => {
+  const raw = await AsyncStorage.getItem(CURRENT_RESUME_DRAFT_KEY);
+
+  if (!raw) {
+    return createEmptyResumeDraft();
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as Partial<ResumeDraft>;
+    return {
+      ...createEmptyResumeDraft(),
+      ...parsed,
+      result: parsed.result ?? null,
+    };
+  } catch {
+    return createEmptyResumeDraft();
+  }
+};
+
+export const saveCurrentResumeDraft = async (draft: ResumeDraft) => {
+  await AsyncStorage.setItem(CURRENT_RESUME_DRAFT_KEY, JSON.stringify(draft));
+};
+
+export const clearCurrentResumeDraft = async () => {
+  await AsyncStorage.removeItem(CURRENT_RESUME_DRAFT_KEY);
 };
 
 export const createResumeVersion = ({
