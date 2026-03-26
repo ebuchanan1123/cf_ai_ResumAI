@@ -45,7 +45,8 @@ type ResumeStyle =
   | 'Mono'
   | 'Canvas'
   | 'Harbor'
-  | 'Rosewood';
+  | 'Rosewood'
+  | 'Regent';
 
 type TailoredResumeResponse = {
   summary: string;
@@ -179,6 +180,14 @@ const RESUME_STYLE_OPTIONS: {
     accent: '#9F1239',
     previewBackground: '#FFF8FA',
     previewInk: '#3F1D2E',
+  },
+  {
+    value: 'Regent',
+    label: 'Regent Navy',
+    description: 'Deep navy with soft cream accents',
+    accent: '#1D3557',
+    previewBackground: '#FFF8E7',
+    previewInk: '#102A43',
   },
 ];
 
@@ -960,6 +969,13 @@ ${cert.details || ''}`.trim()
         accentColor: [159, 18, 57],
         sectionFill: [255, 228, 230],
       },
+      Regent: {
+        font: 'times',
+        headingColor: [16, 42, 67],
+        textColor: [30, 41, 59],
+        accentColor: [29, 53, 87],
+        sectionFill: [255, 248, 231],
+      },
     };
 
     return themes[style];
@@ -1223,6 +1239,29 @@ ${cert.details || ''}`.trim()
         bulletMarkerColor: '#9F1239',
         headingBorder: '6px solid #9F1239',
         sectionTitleBorder: '4px solid #9F1239',
+      },
+      Regent: {
+        fontFamily: 'Georgia, "Times New Roman", serif',
+        bodyFontSize: '10.9pt',
+        bodyLineHeight: '1.48',
+        textColor: '#1E293B',
+        headingSize: '24pt',
+        headingWeight: '700',
+        headingColor: '#102A43',
+        sectionSpacing: '18px',
+        sectionBorder: 'none',
+        itemSpacing: '12px',
+        subtitleStyle: 'normal',
+        metaFontSize: '9.5pt',
+        pageBackground: '#FFFBF2',
+        accentColor: '#1D3557',
+        contactColor: '#8C5E3C',
+        sectionTitleBackground: '#FFF3D6',
+        sectionTitlePadding: '6px 10px',
+        itemTitleColor: '#102A43',
+        bulletMarkerColor: '#1D3557',
+        headingBorder: '6px solid #1D3557',
+        sectionTitleBorder: '4px solid #C9A66B',
       },
     };
 
