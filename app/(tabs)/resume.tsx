@@ -244,6 +244,53 @@ const normalizePdfText = (value: string) =>
     .replace(/\u00A0/g, ' ')
     .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, ' ');
 
+const toFilenameSlug = (value: string) =>
+  (value || '')
+    .trim()
+    .replace(/&/g, ' and ')
+    .replace(/[^A-Za-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .replace(/_+/g, '_');
+
+const extractCompanyName = (jobDescription: string) => {
+  const lines = jobDescription
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 12);
+
+  const patterns = [
+    /\b(?:at|join|with|for)\s+([A-Z][A-Za-z0-9&.,' -]{1,40})/,
+    /\bcompany\s*:\s*([A-Z][A-Za-z0-9&.,' -]{1,40})/i,
+    /\babout\s+([A-Z][A-Za-z0-9&.,' -]{1,40})/,
+  ];
+
+  for (const line of lines) {
+    for (const pattern of patterns) {
+      const match = line.match(pattern);
+      const candidate = match?.[1]?.trim().replace(/[.,:;|/-]+$/g, '');
+      if (candidate && candidate.split(' ').length <= 5) {
+        return candidate;
+      }
+    }
+
+    if (/^[A-Z][A-Za-z0-9&.,' -]{1,40}$/.test(line) && line.split(' ').length <= 5) {
+      return line.replace(/[.,:;|/-]+$/g, '');
+    }
+  }
+
+  return '';
+};
+
+const buildResumePdfFilename = (profile: UserProfile | null, jobDescription: string) => {
+  const namePart = toFilenameSlug(profile?.fullName || 'resume') || 'resume';
+  const companyPart = toFilenameSlug(extractCompanyName(jobDescription));
+
+  return companyPart
+    ? `${namePart}_${companyPart}_resume.pdf`
+    : `${namePart}_resume.pdf`;
+};
+
 const ATS_STOP_WORDS = new Set([
   'about',
   'ability',
@@ -1767,9 +1814,7 @@ ${cert.details || ''}`.trim()
           });
         }
 
-        pdf.save(
-          `${(profile.fullName || 'resume').replace(/\s+/g, '_').toLowerCase()}_resume.pdf`
-        );
+        pdf.save(buildResumePdfFilename(profile, jobDescription));
 
         return;
       }
