@@ -27,6 +27,15 @@ import {
 
 type Tone = 'Concise' | 'Technical' | 'Impact-focused';
 
+const showAlert = (title: string, message: string) => {
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    window.alert(`${title}\n\n${message}`);
+    return;
+  }
+
+  Alert.alert(title, message);
+};
+
 export default function CoverLetterScreen() {
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1400;
@@ -57,7 +66,7 @@ export default function CoverLetterScreen() {
         }
         setCoverLetter(storedDraft.coverLetter || '');
       } catch {
-        Alert.alert('Error', 'Failed to load profile.');
+        showAlert('Error', 'Failed to load profile.');
       } finally {
         setDraftHydrated(true);
         setProfileLoading(false);
@@ -87,20 +96,20 @@ export default function CoverLetterScreen() {
     try {
       const storedProfile = await loadProfileFromStorage();
       setProfile(storedProfile);
-      Alert.alert('Loaded', 'Latest profile data loaded.');
+      showAlert('Loaded', 'Latest profile data loaded.');
     } catch {
-      Alert.alert('Error', 'Failed to reload profile.');
+      showAlert('Error', 'Failed to reload profile.');
     }
   };
 
   const generateCoverLetter = async () => {
     if (!profile) {
-      Alert.alert('Error', 'Profile is not loaded yet.');
+      showAlert('Error', 'Profile is not loaded yet.');
       return;
     }
 
     if (jobDescription.trim().length < 30) {
-      Alert.alert('Error', 'Please paste a longer job description.');
+      showAlert('Error', 'Please paste a longer job description.');
       return;
     }
 
@@ -112,7 +121,7 @@ export default function CoverLetterScreen() {
 
       const usage = await getDailyUsage('cover_letter_generation');
       if (usage.remaining === 0) {
-        Alert.alert(
+        showAlert(
           'Daily limit reached',
           getLimitReachedMessage('cover_letter_generation', 'cover letter generations')
         );
@@ -147,7 +156,7 @@ export default function CoverLetterScreen() {
       if (usageConsumed) {
         await releaseDailyUsage('cover_letter_generation');
       }
-      Alert.alert('Error', err.message || 'Something went wrong.');
+      showAlert('Error', err.message || 'Something went wrong.');
     } finally {
       setLoading(false);
     }
@@ -156,7 +165,7 @@ export default function CoverLetterScreen() {
   const copyCoverLetter = async () => {
     if (!coverLetter.trim()) return;
     await Clipboard.setStringAsync(coverLetter);
-    Alert.alert('Copied', 'Cover letter copied to clipboard.');
+    showAlert('Copied', 'Cover letter copied to clipboard.');
   };
 
   const clearAll = () => {

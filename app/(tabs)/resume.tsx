@@ -43,7 +43,9 @@ type ResumeStyle =
   | 'Spotlight'
   | 'Nordic'
   | 'Mono'
-  | 'Canvas';
+  | 'Canvas'
+  | 'Harbor'
+  | 'Rosewood';
 
 type TailoredResumeResponse = {
   summary: string;
@@ -161,6 +163,22 @@ const RESUME_STYLE_OPTIONS: {
     accent: '#F97316',
     previewBackground: '#FFFDF8',
     previewInk: '#6D28D9',
+  },
+  {
+    value: 'Harbor',
+    label: 'Harbor Slate',
+    description: 'Calm, structured, and professional',
+    accent: '#0F766E',
+    previewBackground: '#F8FAFC',
+    previewInk: '#0F172A',
+  },
+  {
+    value: 'Rosewood',
+    label: 'Rosewood Editorial',
+    description: 'Elegant serif with rich contrast',
+    accent: '#9F1239',
+    previewBackground: '#FFF8FA',
+    previewInk: '#3F1D2E',
   },
 ];
 
@@ -308,6 +326,53 @@ const extractImportantKeywords = (text: string) => {
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
     .map(([keyword]) => keyword)
     .slice(0, 24);
+};
+
+const canonicalizeKeyword = (value: string) => {
+  const normalized = value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9+#./-\s]/g, '')
+    .replace(/\s+/g, ' ');
+
+  if (normalized.length > 4 && normalized.endsWith('ies')) {
+    return `${normalized.slice(0, -3)}y`;
+  }
+
+  if (
+    normalized.length > 4 &&
+    normalized.endsWith('s') &&
+    !normalized.endsWith('ss') &&
+    !normalized.endsWith('us')
+  ) {
+    return normalized.slice(0, -1);
+  }
+
+  return normalized;
+};
+
+const keywordsOverlap = (left: string, right: string) => {
+  const a = canonicalizeKeyword(left);
+  const b = canonicalizeKeyword(right);
+
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if (a.length >= 5 && b.includes(a)) return true;
+  if (b.length >= 5 && a.includes(b)) return true;
+  return false;
+};
+
+const dedupeKeywords = (keywords: string[]) => {
+  const unique: string[] = [];
+
+  keywords.forEach((keyword) => {
+    const trimmed = keyword.trim();
+    if (!trimmed) return;
+    if (unique.some((existing) => keywordsOverlap(existing, trimmed))) return;
+    unique.push(trimmed);
+  });
+
+  return unique;
 };
 
 const formatKeywordLabel = (keyword: string) =>
@@ -706,22 +771,39 @@ ${cert.details || ''}`.trim()
       .join(' ')
       .toLowerCase();
 
-    const extractedKeywords = extractImportantKeywords(jobDescription);
-    const matchedKeywords = extractedKeywords.filter((keyword) => resumeCorpus.includes(keyword));
-    const suggestedKeywords = [...new Set(result.missingKeywords.map((keyword) => keyword.trim()).filter(Boolean))];
-    const denominator = matchedKeywords.length + suggestedKeywords.length;
-    const score = denominator === 0 ? 100 : Math.round((matchedKeywords.length / denominator) * 100);
+    const normalizedResumeCorpus = ` ${resumeCorpus.replace(/[^a-z0-9+#./-]+/g, ' ')} `;
+    const extractedKeywords = dedupeKeywords(extractImportantKeywords(jobDescription)).slice(0, 16);
+    const matchedKeywords = extractedKeywords.filter((keyword) => {
+      const canonical = canonicalizeKeyword(keyword);
+      return canonical ? normalizedResumeCorpus.includes(` ${canonical} `) : false;
+    });
+    const suggestedKeywords = dedupeKeywords(
+      result.missingKeywords
+        .map((keyword) => keyword.trim())
+        .filter(Boolean)
+        .filter(
+          (keyword) =>
+            extractedKeywords.some((jobKeyword) => keywordsOverlap(jobKeyword, keyword)) &&
+            !matchedKeywords.some((matchedKeyword) => keywordsOverlap(matchedKeyword, keyword))
+        )
+    ).slice(0, 8);
+
+    const coverageRatio =
+      extractedKeywords.length === 0 ? 1 : matchedKeywords.length / extractedKeywords.length;
+    const score = Math.round(
+      Math.min(100, 22 + coverageRatio * 72 + Math.min(matchedKeywords.length, 6))
+    );
 
     let toneLabel = 'Strong alignment';
     let color = '#15803D';
 
-    if (score < 50) {
+    if (score < 45) {
       toneLabel = 'Needs stronger alignment';
       color = '#EF4444';
-    } else if (score < 70) {
+    } else if (score < 65) {
       toneLabel = 'Some important gaps remain';
       color = '#F59E0B';
-    } else if (score < 90) {
+    } else if (score < 85) {
       toneLabel = 'Looking competitive';
       color = '#84CC16';
     }
@@ -812,6 +894,20 @@ ${cert.details || ''}`.trim()
         textColor: [31, 41, 55],
         accentColor: [249, 115, 22],
         sectionFill: [255, 237, 213],
+      },
+      Harbor: {
+        font: 'helvetica',
+        headingColor: [15, 23, 42],
+        textColor: [30, 41, 59],
+        accentColor: [15, 118, 110],
+        sectionFill: [240, 253, 250],
+      },
+      Rosewood: {
+        font: 'times',
+        headingColor: [63, 29, 46],
+        textColor: [68, 39, 55],
+        accentColor: [159, 18, 57],
+        sectionFill: [255, 228, 230],
       },
     };
 
@@ -1030,6 +1126,52 @@ ${cert.details || ''}`.trim()
         bulletMarkerColor: '#F97316',
         headingBorder: '6px solid #F97316',
         sectionTitleBorder: '4px solid #F97316',
+      },
+      Harbor: {
+        fontFamily: '"Segoe UI", "Avenir Next", sans-serif',
+        bodyFontSize: '10.9pt',
+        bodyLineHeight: '1.48',
+        textColor: '#1E293B',
+        headingSize: '24pt',
+        headingWeight: '800',
+        headingColor: '#0F172A',
+        sectionSpacing: '18px',
+        sectionBorder: 'none',
+        itemSpacing: '12px',
+        subtitleStyle: 'normal',
+        metaFontSize: '9.5pt',
+        pageBackground: '#F8FAFC',
+        accentColor: '#0F766E',
+        contactColor: '#0F766E',
+        sectionTitleBackground: '#ECFDF5',
+        sectionTitlePadding: '6px 10px',
+        itemTitleColor: '#0F172A',
+        bulletMarkerColor: '#0F766E',
+        headingBorder: '6px solid #0F766E',
+        sectionTitleBorder: '4px solid #0F766E',
+      },
+      Rosewood: {
+        fontFamily: 'Georgia, "Times New Roman", serif',
+        bodyFontSize: '11pt',
+        bodyLineHeight: '1.48',
+        textColor: '#442737',
+        headingSize: '24pt',
+        headingWeight: '700',
+        headingColor: '#3F1D2E',
+        sectionSpacing: '18px',
+        sectionBorder: 'none',
+        itemSpacing: '12px',
+        subtitleStyle: 'normal',
+        metaFontSize: '9.5pt',
+        pageBackground: '#FFF8FA',
+        accentColor: '#9F1239',
+        contactColor: '#9F1239',
+        sectionTitleBackground: '#FFE4E6',
+        sectionTitlePadding: '6px 10px',
+        itemTitleColor: '#3F1D2E',
+        bulletMarkerColor: '#9F1239',
+        headingBorder: '6px solid #9F1239',
+        sectionTitleBorder: '4px solid #9F1239',
       },
     };
 

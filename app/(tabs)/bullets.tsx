@@ -27,6 +27,15 @@ import {
 
 type Tone = 'Concise' | 'Technical' | 'Impact-focused';
 
+const showAlert = (title: string, message: string) => {
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    window.alert(`${title}\n\n${message}`);
+    return;
+  }
+
+  Alert.alert(title, message);
+};
+
 export default function HomeScreen() {
   const [jobTitle, setJobTitle] = useState('');
   const [experience, setExperience] = useState('');
@@ -51,7 +60,7 @@ export default function HomeScreen() {
         }
         setBullets(Array.isArray(storedDraft.bullets) ? storedDraft.bullets : []);
       } catch {
-        Alert.alert('Error', 'Failed to load your saved bullet draft.');
+        showAlert('Error', 'Failed to load your saved bullet draft.');
       } finally {
         setDraftHydrated(true);
       }
@@ -78,13 +87,13 @@ export default function HomeScreen() {
 
   const generate = async () => {
     if (!jobTitle.trim() || experience.trim().length < 20) {
-      Alert.alert('Error', 'Please enter a job title and a longer experience description.');
+      showAlert('Error', 'Please enter a job title and a longer experience description.');
       return;
     }
 
     const usage = await getDailyUsage('bullet_generation');
     if (usage.remaining === 0) {
-      Alert.alert(
+      showAlert(
         'Daily limit reached',
         getLimitReachedMessage('bullet_generation', 'bullet generations')
       );
@@ -127,7 +136,7 @@ export default function HomeScreen() {
       if (usageConsumed) {
         await releaseDailyUsage('bullet_generation');
       }
-      Alert.alert('Error', err.message || 'Something went wrong.');
+      showAlert('Error', err.message || 'Something went wrong.');
     } finally {
       setLoading(false);
     }
@@ -135,13 +144,13 @@ export default function HomeScreen() {
 
   const regenerateBullet = async (index: number) => {
     if (!jobTitle.trim() || experience.trim().length < 20) {
-      Alert.alert('Error', 'Please enter a job title and a longer experience description.');
+      showAlert('Error', 'Please enter a job title and a longer experience description.');
       return;
     }
 
     const usage = await getDailyUsage('bullet_generation');
     if (usage.remaining === 0) {
-      Alert.alert(
+      showAlert(
         'Daily limit reached',
         getLimitReachedMessage('bullet_generation', 'bullet generations')
       );
@@ -184,13 +193,13 @@ export default function HomeScreen() {
       if (usageConsumed) {
         await releaseDailyUsage('bullet_generation');
       }
-      Alert.alert('Error', err.message || 'Failed to regenerate bullet.');
+      showAlert('Error', err.message || 'Failed to regenerate bullet.');
     }
   };
 
   const copyBullet = async (bullet: string) => {
     await Clipboard.setStringAsync(bullet);
-    Alert.alert('Copied', 'Bullet copied to clipboard.');
+    showAlert('Copied', 'Bullet copied to clipboard.');
   };
 
   const copyAllBullets = async () => {
@@ -198,7 +207,7 @@ export default function HomeScreen() {
 
     const text = bullets.map((bullet) => `• ${bullet}`).join('\n');
     await Clipboard.setStringAsync(text);
-    Alert.alert('Copied', 'All bullets copied to clipboard.');
+    showAlert('Copied', 'All bullets copied to clipboard.');
   };
 
   const clearAll = () => {
