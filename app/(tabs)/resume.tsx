@@ -217,6 +217,15 @@ const buildContactItems = (profile: UserProfile | null): { label: string; href?:
   return items;
 };
 
+const normalizePdfText = (value: string) =>
+  (value || '')
+    .replace(/[\u2018\u2019\u201A\u201B]/g, "'")
+    .replace(/[\u201C\u201D\u201E\u201F]/g, '"')
+    .replace(/[\u2013\u2014\u2212]/g, '-')
+    .replace(/\u2026/g, '...')
+    .replace(/\u00A0/g, ' ')
+    .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, ' ');
+
 const ATS_STOP_WORDS = new Set([
   'about',
   'ability',
@@ -1383,7 +1392,7 @@ ${cert.details || ''}`.trim()
         ) => {
           const fontSize = options?.fontSize ?? 10.5;
           const appliedLineHeight = options?.lineGap ?? lineHeight;
-          const safeText = (text || '').trim();
+          const safeText = normalizePdfText(text).trim();
           if (!safeText) return;
           pdf.setFont(theme.font, options?.fontStyle ?? 'normal');
           pdf.setFontSize(fontSize);
@@ -1396,6 +1405,8 @@ ${cert.details || ''}`.trim()
 
         const drawSectionTitle = (title: string) => {
           ensureSpace(28);
+          const safeTitle = normalizePdfText(title).trim();
+          if (!safeTitle) return;
           if (theme.sectionFill) {
             pdf.setFillColor(theme.sectionFill[0], theme.sectionFill[1], theme.sectionFill[2]);
             pdf.roundedRect(marginX, y - 11, contentWidth, 18, 3, 3, 'F');
@@ -1406,7 +1417,7 @@ ${cert.details || ''}`.trim()
           pdf.setFont(theme.font, 'bold');
           pdf.setFontSize(11.5);
           setTextColor(theme.headingColor);
-          pdf.text(title, marginX + 10, y + 2);
+          pdf.text(safeTitle, marginX + 10, y + 2);
           y += sectionGap;
         };
 
@@ -1430,7 +1441,9 @@ ${cert.details || ''}`.trim()
           pdf.setFontSize(9.5);
 
           items.forEach((item, index) => {
-            const labelWidth = pdf.getTextWidth(item.label);
+            const safeLabel = normalizePdfText(item.label).trim();
+            if (!safeLabel) return;
+            const labelWidth = pdf.getTextWidth(safeLabel);
 
             if (index > 0) {
               const separatorWidth = pdf.getTextWidth(' | ');
@@ -1449,9 +1462,9 @@ ${cert.details || ''}`.trim()
 
             setTextColor(item.href ? theme.accentColor : theme.textColor);
             if (item.href) {
-              pdf.textWithLink(item.label, currentX, currentY, { url: item.href });
+              pdf.textWithLink(safeLabel, currentX, currentY, { url: item.href });
             } else {
-              pdf.text(item.label, currentX, currentY);
+              pdf.text(safeLabel, currentX, currentY);
             }
             currentX += labelWidth;
           });
@@ -1462,7 +1475,7 @@ ${cert.details || ''}`.trim()
         const drawBulletList = (bullets: string[]) => {
           bullets.filter(Boolean).forEach((bullet) => {
             const bulletLines = pdf.splitTextToSize(
-              bullet.trim(),
+              normalizePdfText(bullet).trim(),
               bodyContentWidth - bulletIndent - 10
             );
             ensureSpace(bulletLines.length * lineHeight + 2);
@@ -1523,7 +1536,7 @@ ${cert.details || ''}`.trim()
         pdf.setFont(theme.font, 'bold');
         pdf.setFontSize(22);
         setTextColor(theme.headingColor);
-        pdf.text(profile.fullName || 'Your Name', marginX, y);
+        pdf.text(normalizePdfText(profile.fullName || 'Your Name'), marginX, y);
         y += 20;
 
         const contactItems = buildContactItems(profile);
