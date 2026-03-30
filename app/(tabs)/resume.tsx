@@ -18,6 +18,12 @@ import * as Clipboard from 'expo-clipboard';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import {
+  loadBulletDraft,
+  loadCoverLetterDraft,
+  type BulletDraft,
+  type CoverLetterDraft,
+} from '@/lib/generationDraftStorage';
+import {
   createResumeVersion,
   loadCurrentResumeDraft,
   loadSavedResumeVersions,
@@ -111,6 +117,44 @@ type ResultSectionKey =
   | 'projects'
   | 'experience'
   | 'certifications';
+
+const AGENT_WORKFLOW_STEPS = [
+  {
+    title: 'Parse job posting',
+    activeStatus: 'Reading the target role and normalizing the posting.',
+    completeStatus: 'Job posting parsed.',
+  },
+  {
+    title: 'Extract requirements',
+    activeStatus: 'Pulling out skills, tools, and role signals.',
+    completeStatus: 'Requirements extracted.',
+  },
+  {
+    title: 'Compare to profile',
+    activeStatus: 'Matching the role against your saved background.',
+    completeStatus: 'Profile overlap mapped.',
+  },
+  {
+    title: 'Rewrite resume',
+    activeStatus: 'Reweighting bullets, projects, and role language.',
+    completeStatus: 'Resume content rewritten.',
+  },
+  {
+    title: 'Score ATS fit',
+    activeStatus: 'Estimating keyword coverage and section strength.',
+    completeStatus: 'ATS fit scored.',
+  },
+  {
+    title: 'Prepare export',
+    activeStatus: 'Getting styles and export-ready output into place.',
+    completeStatus: 'Export setup ready.',
+  },
+  {
+    title: 'Generate cover letter',
+    activeStatus: 'Lining up the next recommended application step.',
+    completeStatus: 'Cover letter generation is ready as a next step.',
+  },
+] as const;
 
 const RESUME_STYLE_OPTIONS: {
   value: ResumeStyle;
@@ -720,6 +764,40 @@ const formatKeywordLabel = (keyword: string) =>
     .map((part) => (part ? part[0].toUpperCase() + part.slice(1) : part))
     .join(' ');
 
+const extractSentences = (value: string) =>
+  value
+    .split(/(?<=[.!?])\s+/)
+    .map((sentence: string) => sentence.trim())
+    .filter(Boolean);
+
+const createEmptyBulletDraftState = (): BulletDraft => ({
+  jobTitle: '',
+  experience: '',
+  jobDescription: '',
+  tone: 'Technical',
+  bullets: [],
+});
+
+const createEmptyCoverLetterDraftState = (): CoverLetterDraft => ({
+  jobDescription: '',
+  companyContext: '',
+  hiringManager: '',
+  tone: 'Technical',
+  coverLetter: '',
+});
+
+const TECHNICAL_KEYWORD_PATTERN =
+  /\b(api|apis|backend|frontend|full[\s-]?stack|react|react native|next\.?js|node|node\.?js|nest|nest\.?js|typescript|javascript|python|java|c\+\+|postgres|postgresql|mysql|sql|mongodb|docker|kubernetes|aws|azure|gcp|cloud|deployment|devops|ci\/cd|graphql|rest|microservices|redis|firebase|openai|llm|ai|machine learning)\b/i;
+
+const TOOL_PLATFORM_PATTERN =
+  /\b(docker|kubernetes|aws|azure|gcp|firebase|vercel|render|netlify|postgres|postgresql|mysql|mongodb|redis|github actions|ci\/cd|terraform|snowflake|databricks|airflow)\b/i;
+
+const BUSINESS_LANGUAGE_PATTERN =
+  /\b(stakeholder|customer|client|roadmap|cross[\s-]?functional|ownership|strategy|analytics|operations|workflow|reporting|business|product|communication|collaboration|agile|delivery|optimization)\b/i;
+
+const METRICS_LANGUAGE_PATTERN =
+  /\b(increase|improve|reduce|grew|growth|saved|faster|slower|efficiency|latency|performance|conversion|adoption|retention|accuracy|throughput|scale|scaled)\b/i;
+
 export default function ResumeScreen() {
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1400;
@@ -742,6 +820,10 @@ export default function ResumeScreen() {
   const [savingVersion, setSavingVersion] = useState(false);
   const [expandedEntryEditor, setExpandedEntryEditor] = useState<string | null>(null);
   const [draftHydrated, setDraftHydrated] = useState(false);
+  const [activeWorkflowStep, setActiveWorkflowStep] = useState(0);
+  const [bulletDraft, setBulletDraft] = useState<BulletDraft>(createEmptyBulletDraftState());
+  const [coverLetterDraft, setCoverLetterDraft] =
+    useState<CoverLetterDraft>(createEmptyCoverLetterDraftState());
 
   const [expandedSections, setExpandedSections] = useState<Record<ResultSectionKey, boolean>>({
     saved: false,
@@ -757,16 +839,21 @@ export default function ResumeScreen() {
   useEffect(() => {
     const loadInitialData = async () => {
       try {
-        const [storedProfile, storedVersions, storedDraft] = await Promise.all([
+        const [storedProfile, storedVersions, storedDraft, storedBulletDraft, storedCoverLetterDraft] =
+          await Promise.all([
           loadProfileFromStorage(),
           loadSavedResumeVersions(),
           loadCurrentResumeDraft(),
+          loadBulletDraft(),
+          loadCoverLetterDraft(),
         ]);
 
         setProfile(storedProfile);
         setJobUrl(storedDraft.jobUrl || '');
         setImportedJobPreview((storedDraft.importedJobPreview as ImportedJobPreview | null) || null);
         setSavedVersions(storedVersions);
+        setBulletDraft(storedBulletDraft);
+        setCoverLetterDraft(storedCoverLetterDraft);
         setJobDescription(storedDraft.jobDescription || '');
         setSaveTitle(storedDraft.saveTitle || '');
         if (storedDraft.tone === 'Concise' || storedDraft.tone === 'Technical' || storedDraft.tone === 'Impact-focused') {
@@ -818,6 +905,27 @@ export default function ResumeScreen() {
     saveTitle,
     result,
   ]);
+
+  useEffect(() => {
+    if (!loading) {
+      setActiveWorkflowStep(0);
+      return;
+    }
+
+    setActiveWorkflowStep(0);
+
+    const intervalId = setInterval(() => {
+      setActiveWorkflowStep((prev) => {
+        if (prev >= AGENT_WORKFLOW_STEPS.length - 1) {
+          return prev;
+        }
+
+        return prev + 1;
+      });
+    }, 700);
+
+    return () => clearInterval(intervalId);
+  }, [loading]);
 
   const toggleSection = (key: ResultSectionKey) => {
     setExpandedSections((prev) => ({
@@ -1305,7 +1413,7 @@ ${cert.details || ''}`.trim()
       { key: 'skills', label: 'Skills', corpus: normalizeForKeywordSearch(skillsText), weight: 0.24 },
       { key: 'projects', label: 'Projects', corpus: normalizeForKeywordSearch(projectsText), weight: 0.34 },
       { key: 'experience', label: 'Experience', corpus: normalizeForKeywordSearch(experienceText), weight: 0.24 },
-    ] as const;
+] as const;
 
     const sectionScores = sectionCorpora.map((section) => {
       const sectionMatches = extractedKeywords.filter((keyword) =>
@@ -1414,6 +1522,116 @@ ${cert.details || ''}`.trim()
       }
     }
 
+    const roleValueSignals = dedupeKeywords(
+      extractedKeywords.filter(
+        (keyword) =>
+          TECHNICAL_KEYWORD_PATTERN.test(keyword) ||
+          TOOL_PLATFORM_PATTERN.test(keyword) ||
+          BUSINESS_LANGUAGE_PATTERN.test(keyword)
+      )
+    ).slice(0, 4);
+
+    const strongProfileSignals = dedupeKeywords([
+      ...matchedKeywords.filter((keyword) => TECHNICAL_KEYWORD_PATTERN.test(keyword)),
+      ...sectionScores
+        .filter((section) => section.score >= 7)
+        .map((section) => section.label.toLowerCase()),
+    ]).slice(0, 4);
+
+    const changeSignals = dedupeKeywords([
+      projectsScore >= experienceScore ? 'projects' : 'experience',
+      summaryScore >= 6 ? 'summary rewrite' : 'skills emphasis',
+      ...matchedKeywords.filter((keyword) => /(api|backend|frontend|react|node|ai|cloud|deployment)/i.test(keyword)),
+    ]).slice(0, 3);
+
+    const reasoningCards = [
+      {
+        title: 'What the role values',
+        body:
+          roleValueSignals.length > 0
+            ? `This job is leaning on ${roleValueSignals
+                .map((keyword) => formatKeywordLabel(keyword))
+                .join(', ')}, so the resume is trying to keep those signals visible early.`
+            : 'The role is emphasizing a mix of technical execution and clear role-specific language, so the resume is tuned to surface the strongest matching signals quickly.',
+      },
+      {
+        title: 'What your profile matched well',
+        body:
+          strongProfileSignals.length > 0
+            ? `Your background already gave ResumAI good material around ${strongProfileSignals
+                .map((keyword) => formatKeywordLabel(keyword))
+                .join(', ')}, which is why those themes show up strongly in the tailored version.`
+            : 'Your profile already had enough relevant overlap for ResumAI to build around your strongest technical and project signals without adding filler.',
+      },
+      {
+        title: 'What ResumAI changed',
+        body:
+          changeSignals.length > 0
+            ? `To align better, ResumAI pushed forward ${changeSignals
+                .map((keyword) => formatKeywordLabel(keyword))
+                .join(', ')}, and reweighted the resume toward the sections that looked most relevant for this role.`
+            : 'ResumAI mainly tightened wording, surfaced stronger role language, and rebalanced the resume toward the sections most likely to matter for this posting.',
+      },
+    ];
+
+    const technicalSkillGaps = dedupeKeywords(
+      suggestedKeywords.filter((keyword) => TECHNICAL_KEYWORD_PATTERN.test(keyword))
+    ).slice(0, 5);
+
+    const businessLanguageGaps = dedupeKeywords(
+      [...suggestedKeywords, ...weakMatches].filter((keyword) => BUSINESS_LANGUAGE_PATTERN.test(keyword))
+    ).slice(0, 5);
+
+    const toolsPlatformGaps = dedupeKeywords(
+      suggestedKeywords.filter((keyword) => TOOL_PLATFORM_PATTERN.test(keyword))
+    ).slice(0, 5);
+
+    const niceToHaveSentences = extractSentences(jobDescription).filter((sentence) =>
+      /\b(preferred|plus|nice to have|bonus|asset)\b/i.test(sentence)
+    );
+
+    const niceToHaveQualifications = dedupeKeywords(
+      niceToHaveSentences.flatMap((sentence) => extractImportantKeywords(sentence))
+    )
+      .filter((keyword) => !resumeContainsKeyword(normalizedResumeCorpus, keyword))
+      .slice(0, 4);
+
+    const metricsMissing =
+      !/\d/.test(`${projectsText} ${experienceText}`) ||
+      (projectsScore < 7 && METRICS_LANGUAGE_PATTERN.test(jobDescription) && !/\d/.test(projectsText));
+
+    const fitAssessment =
+      score >= 82 && suggestedKeywords.length <= 2
+        ? {
+            label: 'Strong fit',
+            description:
+              'You already look competitive for this role. Focus on polishing bullets and keeping the strongest evidence near the top.',
+          }
+        : score >= 66
+          ? {
+              label: 'Partial fit',
+              description:
+                'You have solid overlap, but a few targeted wording or evidence changes would make the fit much clearer.',
+            }
+          : {
+              label: 'Stretch role',
+              description:
+                'There is still useful overlap here, but you will need stronger evidence, sharper positioning, or more matching experience to look competitive.',
+            };
+
+    const gapAnalysis = {
+      technicalSkills: technicalSkillGaps,
+      businessLanguage: businessLanguageGaps,
+      quantifiedOutcomes: metricsMissing
+        ? [
+            'Show outcomes with numbers, scope, speed improvements, usage, or other measurable evidence where truthful.',
+          ]
+        : [],
+      toolsPlatforms: toolsPlatformGaps,
+      niceToHaveQualifications,
+      fitAssessment,
+    };
+
     return {
       score,
       toneLabel,
@@ -1427,8 +1645,170 @@ ${cert.details || ''}`.trim()
       sectionScores,
       recruiterFeedback,
       actions,
+      reasoningCards,
+      gapAnalysis,
     };
   }, [jobDescription, result]);
+
+  const applicationKit = useMemo(() => {
+    if (!result || !profile) return null;
+
+    const projectLead = result.projects[0];
+    const experienceLead = result.experience[0];
+    const topKeywords = atsInsights?.matchedKeywords.slice(0, 3).map(formatKeywordLabel) ?? [];
+    const missingKeywords = atsInsights?.missingKeywords.slice(0, 2).map(formatKeywordLabel) ?? [];
+    const companyName = importedJobPreview?.company || extractCompanyName(jobDescription) || 'the team';
+    const roleTitle =
+      importedJobPreview?.title ||
+      extractSentences(jobDescription).find((sentence) => /(engineer|developer|analyst|intern|specialist|associate|manager)/i.test(sentence)) ||
+      'this role';
+
+    const whyImFit = [
+      `${profile.fullName || 'This candidate'} brings hands-on experience across ${
+        topKeywords.length > 0 ? topKeywords.join(', ') : 'technical execution and product delivery'
+      }.`,
+      projectLead
+        ? `Projects like ${projectLead.name} show real product-building experience rather than only coursework.`
+        : null,
+      experienceLead
+        ? `Recent experience at ${experienceLead.company} adds practical evidence of execution in team settings.`
+        : null,
+    ]
+      .filter(Boolean)
+      .join(' ');
+
+    const recruiterMessage = `Hi, I’m ${profile.fullName || 'a candidate'} and I recently applied for ${roleTitle} at ${companyName}. I built my materials around the role’s focus on ${
+      topKeywords.length > 0 ? topKeywords.join(', ') : 'the core technical requirements'
+    }, and I think my background in ${result.skills.slice(0, 4).join(', ')} could be a strong match. I’d love to stay on your radar if the team is still reviewing applicants.`;
+
+    const interviewTalkingPoints = [
+      projectLead
+        ? `Walk through ${projectLead.name} as a real product: what problem it solved, how you built it, and what technical tradeoffs you made.`
+        : null,
+      experienceLead
+        ? `Use ${experienceLead.company} to show how you contributed in a real delivery environment, not just personal projects.`
+        : null,
+      topKeywords.length > 0
+        ? `Be ready to connect your background directly to ${topKeywords.join(', ')} because those are major signals in this posting.`
+        : null,
+      missingKeywords.length > 0
+        ? `If asked about gaps, address ${missingKeywords.join(', ')} honestly and explain adjacent experience or fast ramp-up ability.`
+        : null,
+    ].filter(Boolean) as string[];
+
+    const checklist = [
+      {
+        label: 'Resume ready',
+        complete: !!result,
+        helper: result ? 'Tailored resume is generated and editable.' : 'Generate a tailored resume first.',
+      },
+      {
+        label: 'Cover letter ready',
+        complete: coverLetterDraft.coverLetter.trim().length > 0,
+        helper:
+          coverLetterDraft.coverLetter.trim().length > 0
+            ? 'A saved cover letter draft is available.'
+            : 'Generate a cover letter to complete the kit.',
+      },
+      {
+        label: 'Keywords aligned',
+        complete: (atsInsights?.score ?? 0) >= 70,
+        helper:
+          atsInsights && atsInsights.score >= 70
+            ? `ATS score is ${atsInsights.score}%, which is in a competitive range.`
+            : 'Use the ATS panel to tighten missing keywords and weak sections.',
+      },
+      {
+        label: 'Interview prep ready',
+        complete: interviewTalkingPoints.length >= 3,
+        helper:
+          interviewTalkingPoints.length >= 3
+            ? 'Talking points are ready to practice.'
+            : 'Generate more role-specific material to improve interview prep.',
+      },
+    ];
+
+    return {
+      checklist,
+      atsScore: atsInsights?.score ?? null,
+      bullets: bulletDraft.bullets,
+      coverLetter: coverLetterDraft.coverLetter.trim(),
+      interviewTalkingPoints,
+      recruiterMessage,
+      whyImFit,
+    };
+  }, [atsInsights, bulletDraft.bullets, coverLetterDraft.coverLetter, importedJobPreview, jobDescription, profile, result]);
+
+  const interviewPrep = useMemo(() => {
+    if (!result || !profile) return null;
+
+    const strongestProject =
+      result.projects.find((project) =>
+        extractTechStack([project.name, project.role, ...project.bullets], result.skills).length >= 2
+      ) || result.projects[0] || null;
+
+    const likelyTechnicalQuestions = dedupeCaseInsensitive([
+      ...((atsInsights?.matchedKeywords || [])
+        .filter((keyword) => TECHNICAL_KEYWORD_PATTERN.test(keyword))
+        .slice(0, 3)
+        .map((keyword) => `How have you used ${formatKeywordLabel(keyword)} in a real project or team environment?`) || []),
+      strongestProject
+        ? `Walk me through the architecture and tradeoffs behind ${strongestProject.name}.`
+        : '',
+      result.experience[0]
+        ? `Tell me about a time you improved or delivered something meaningful at ${result.experience[0].company}.`
+        : '',
+    ]).filter(Boolean).slice(0, 5);
+
+    const topTalkingPoints = dedupeCaseInsensitive([
+      ...(applicationKit?.interviewTalkingPoints || []),
+      strongestProject
+        ? `${strongestProject.name} is probably your strongest project to mention because it shows product-building depth and technical decision-making.`
+        : '',
+      atsInsights?.gapAnalysis.quantifiedOutcomes.length
+        ? 'Be ready with one or two truthful outcome metrics, even if they are small, because this role seems to value measurable impact.'
+        : '',
+      result.experience[0]
+        ? `Use ${result.experience[0].company} to prove you can work in a real team environment, not just on solo projects.`
+        : '',
+    ]).filter(Boolean).slice(0, 5);
+
+    const strongestProjectSummary = strongestProject
+      ? `${strongestProject.name}${strongestProject.role ? ` (${strongestProject.role})` : ''} stands out because it is the clearest example of you building something real with relevant stack depth.`
+      : 'Your strongest project will appear here once a tailored resume is generated.';
+
+    const biggestGapLabel =
+      atsInsights?.gapAnalysis.technicalSkills[0] ||
+      atsInsights?.gapAnalysis.toolsPlatforms[0] ||
+      atsInsights?.gapAnalysis.businessLanguage[0] ||
+      '';
+
+    const biggestGapExplanation = biggestGapLabel
+      ? `The biggest visible gap is ${formatKeywordLabel(
+          biggestGapLabel
+        )}. If asked, be honest about not having direct depth there yet, then pivot to adjacent experience and how quickly you have ramped up on similar tools or systems.`
+      : 'There is no single glaring gap right now. If asked about fit, focus on your strongest evidence and be ready to explain how your projects map to the role.';
+
+    const whyYouFitAnswer = applicationKit
+      ? `${applicationKit.whyImFit} What makes me especially interested in this role is that it lines up well with the kind of technical work I’ve already been building and the areas I want to keep growing in.`
+      : '';
+
+    const prepResources = [
+      'Practice a 60-second story for your strongest project: problem, stack, tradeoffs, and outcome.',
+      'Pick 2 experience bullets and be ready to expand them into STAR-style answers.',
+      'Review the top matched keywords and prepare one concrete example for each.',
+      'Write down one honest answer for your biggest gap so you can address it confidently.',
+    ];
+
+    return {
+      topTalkingPoints,
+      likelyTechnicalQuestions,
+      whyYouFitAnswer,
+      strongestProjectSummary,
+      biggestGapExplanation,
+      prepResources,
+    };
+  }, [applicationKit, atsInsights, profile, result]);
 
   const copyFullResume = async () => {
     if (!fullResumeText) return;
@@ -2652,6 +3032,305 @@ ${cert.details || ''}`.trim()
     );
   };
 
+  const renderApplicationKitSection = () => {
+    if (!applicationKit) return null;
+
+    return (
+      <View style={styles.resultCard}>
+        <Text style={styles.sectionEyebrow}>Application Kit</Text>
+        <Text style={styles.resultTitle}>Everything You Need To Apply</Text>
+        <Text style={styles.exportHelperText}>
+          Use this package view to check that your resume, supporting materials, and talking points are all ready before you apply.
+        </Text>
+
+        <View style={styles.actionRow}>
+          <TouchableOpacity
+            style={styles.secondaryButtonCompact}
+            onPress={copyFullResume}
+          >
+            <Text style={styles.secondaryButtonCompactText}>Copy Resume</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.secondaryButtonCompact, exportingPdf && styles.disabledButton]}
+            onPress={exportPdf}
+            disabled={exportingPdf}
+          >
+            <Text style={styles.secondaryButtonCompactText}>
+              {exportingPdf ? 'Exporting...' : 'Download PDF'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.applicationChecklist}>
+          {applicationKit.checklist.map((item) => (
+            <View key={item.label} style={styles.applicationChecklistItem}>
+              <View
+                style={[
+                  styles.applicationChecklistBadge,
+                  item.complete
+                    ? styles.applicationChecklistBadgeComplete
+                    : styles.applicationChecklistBadgePending,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.applicationChecklistBadgeText,
+                    item.complete
+                      ? styles.applicationChecklistBadgeTextComplete
+                      : styles.applicationChecklistBadgeTextPending,
+                  ]}
+                >
+                  {item.complete ? 'Ready' : 'Needs work'}
+                </Text>
+              </View>
+              <View style={styles.applicationChecklistTextWrap}>
+                <Text style={styles.applicationChecklistTitle}>{item.label}</Text>
+                <Text style={styles.applicationChecklistHelper}>{item.helper}</Text>
+              </View>
+            </View>
+          ))}
+        </View>
+
+        <View style={styles.applicationKitGrid}>
+          <View style={styles.applicationKitCard}>
+            <Text style={styles.applicationKitTitle}>ATS Score</Text>
+            <Text style={styles.applicationKitStatValue}>
+              {applicationKit.atsScore !== null ? `${applicationKit.atsScore}%` : 'N/A'}
+            </Text>
+            <Text style={styles.applicationKitBody}>
+              A quick signal for how well the current resume aligns with the role language.
+            </Text>
+          </View>
+
+          <View style={styles.applicationKitCard}>
+            <Text style={styles.applicationKitTitle}>Why I’m a Fit</Text>
+            <Text style={styles.applicationKitBody}>{applicationKit.whyImFit}</Text>
+            <TouchableOpacity
+              style={styles.smallOutlineButton}
+              onPress={() => copySection(applicationKit.whyImFit)}
+            >
+              <Text style={styles.smallOutlineButtonText}>Copy</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.applicationKitCard}>
+            <Text style={styles.applicationKitTitle}>Recruiter Message Draft</Text>
+            <Text style={styles.applicationKitBody}>{applicationKit.recruiterMessage}</Text>
+            <TouchableOpacity
+              style={styles.smallOutlineButton}
+              onPress={() => copySection(applicationKit.recruiterMessage)}
+            >
+              <Text style={styles.smallOutlineButtonText}>Copy</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.applicationKitCard}>
+            <Text style={styles.applicationKitTitle}>Interview Talking Points</Text>
+            {applicationKit.interviewTalkingPoints.length > 0 ? (
+              applicationKit.interviewTalkingPoints.map((point, index) => (
+                <Text key={`talking-point-${index}`} style={styles.atsFeedbackItem}>
+                  {`\u2022 ${point}`}
+                </Text>
+              ))
+            ) : (
+              <Text style={styles.applicationKitBody}>
+                Generate the resume first to unlock role-specific talking points.
+              </Text>
+            )}
+            {applicationKit.interviewTalkingPoints.length > 0 ? (
+              <TouchableOpacity
+                style={styles.smallOutlineButton}
+                onPress={() => copySection(applicationKit.interviewTalkingPoints.map((point) => `• ${point}`).join('\n'))}
+              >
+                <Text style={styles.smallOutlineButtonText}>Copy</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+
+          <View style={styles.applicationKitCard}>
+            <Text style={styles.applicationKitTitle}>Cover Letter</Text>
+            <Text style={styles.applicationKitBody} numberOfLines={4}>
+              {applicationKit.coverLetter || 'No saved cover letter draft yet. Generate one in the Cover Letter tab to complete the kit.'}
+            </Text>
+            {applicationKit.coverLetter ? (
+              <TouchableOpacity
+                style={styles.smallOutlineButton}
+                onPress={() => copySection(applicationKit.coverLetter)}
+              >
+                <Text style={styles.smallOutlineButtonText}>Copy</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+
+          <View style={styles.applicationKitCard}>
+            <Text style={styles.applicationKitTitle}>Optimized Bullets</Text>
+            {applicationKit.bullets.length > 0 ? (
+              <>
+                {applicationKit.bullets.slice(0, 3).map((bullet, index) => (
+                  <Text key={`kit-bullet-${index}`} style={styles.atsFeedbackItem}>
+                    {`\u2022 ${bullet}`}
+                  </Text>
+                ))}
+                <TouchableOpacity
+                  style={styles.smallOutlineButton}
+                  onPress={() => copySection(applicationKit.bullets.map((bullet) => `• ${bullet}`).join('\n'))}
+                >
+                  <Text style={styles.smallOutlineButtonText}>Copy</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <Text style={styles.applicationKitBody}>
+                No saved Bullet AI draft yet. Generate role-specific bullets in the Bullet AI tab to complete the kit.
+              </Text>
+            )}
+          </View>
+        </View>
+      </View>
+    );
+  };
+
+  const renderWorkflowTimeline = () => (
+    <View style={styles.loadingPanel}>
+      <View style={styles.workflowHeader}>
+        <Text style={styles.sectionEyebrow}>Agent Workflow</Text>
+        <Text style={styles.workflowTitle}>ResumAI is building your application materials</Text>
+        <Text style={styles.workflowSubtitle}>
+          Follow the step-by-step workflow while the system analyzes the role and prepares your tailored output.
+        </Text>
+      </View>
+
+      <View style={styles.workflowTimeline}>
+        {AGENT_WORKFLOW_STEPS.map((step, index) => {
+          const isComplete = index < activeWorkflowStep;
+          const isActive = index === activeWorkflowStep;
+
+          return (
+            <View key={step.title} style={styles.workflowStepRow}>
+              <View style={styles.workflowStepIndicatorWrap}>
+                <View
+                  style={[
+                    styles.workflowStepIndicator,
+                    isComplete
+                      ? styles.workflowStepIndicatorComplete
+                      : isActive
+                        ? styles.workflowStepIndicatorActive
+                        : styles.workflowStepIndicatorPending,
+                  ]}
+                >
+                  {isComplete ? (
+                    <Text style={styles.workflowStepIndicatorCheck}>✓</Text>
+                  ) : isActive ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : null}
+                </View>
+                {index < AGENT_WORKFLOW_STEPS.length - 1 ? (
+                  <View
+                    style={[
+                      styles.workflowStepConnector,
+                      index < activeWorkflowStep
+                        ? styles.workflowStepConnectorComplete
+                        : styles.workflowStepConnectorPending,
+                    ]}
+                  />
+                ) : null}
+              </View>
+
+              <View style={styles.workflowStepTextWrap}>
+                <Text
+                  style={[
+                    styles.workflowStepTitle,
+                    isActive && styles.workflowStepTitleActive,
+                    isComplete && styles.workflowStepTitleComplete,
+                  ]}
+                >
+                  {step.title}
+                </Text>
+                <Text style={styles.workflowStepStatus}>
+                  {isComplete
+                    ? step.completeStatus
+                    : isActive
+                      ? step.activeStatus
+                      : 'Waiting in queue.'}
+                </Text>
+              </View>
+            </View>
+          );
+        })}
+      </View>
+    </View>
+  );
+
+  const renderInterviewPrepSection = () => {
+    if (!interviewPrep) return null;
+
+    return (
+      <View style={styles.resultCard}>
+        <Text style={styles.sectionEyebrow}>Interview Prep</Text>
+        <Text style={styles.resultTitle}>Talk Through Your Story With Confidence</Text>
+        <Text style={styles.exportHelperText}>
+          Use this panel to practice the strongest angles of your application before recruiter screens or technical interviews.
+        </Text>
+
+        <View style={styles.applicationKitGrid}>
+          <View style={styles.applicationKitCard}>
+            <Text style={styles.applicationKitTitle}>Top 5 Talking Points</Text>
+            {interviewPrep.topTalkingPoints.map((point, index) => (
+              <Text key={`prep-point-${index}`} style={styles.atsFeedbackItem}>
+                {`\u2022 ${point}`}
+              </Text>
+            ))}
+            <TouchableOpacity
+              style={styles.smallOutlineButton}
+              onPress={() => copySection(interviewPrep.topTalkingPoints.map((point) => `• ${point}`).join('\n'))}
+            >
+              <Text style={styles.smallOutlineButtonText}>Copy</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.applicationKitCard}>
+            <Text style={styles.applicationKitTitle}>Likely Technical Questions</Text>
+            {interviewPrep.likelyTechnicalQuestions.map((question, index) => (
+              <Text key={`prep-question-${index}`} style={styles.atsFeedbackItem}>
+                {`\u2022 ${question}`}
+              </Text>
+            ))}
+          </View>
+
+          <View style={styles.applicationKitCard}>
+            <Text style={styles.applicationKitTitle}>Why You’re a Fit</Text>
+            <Text style={styles.applicationKitBody}>{interviewPrep.whyYouFitAnswer}</Text>
+            <TouchableOpacity
+              style={styles.smallOutlineButton}
+              onPress={() => copySection(interviewPrep.whyYouFitAnswer)}
+            >
+              <Text style={styles.smallOutlineButtonText}>Copy</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.applicationKitCard}>
+            <Text style={styles.applicationKitTitle}>Strongest Project To Mention</Text>
+            <Text style={styles.applicationKitBody}>{interviewPrep.strongestProjectSummary}</Text>
+          </View>
+
+          <View style={styles.applicationKitCard}>
+            <Text style={styles.applicationKitTitle}>Biggest Gap And How To Explain It</Text>
+            <Text style={styles.applicationKitBody}>{interviewPrep.biggestGapExplanation}</Text>
+          </View>
+
+          <View style={styles.applicationKitCard}>
+            <Text style={styles.applicationKitTitle}>Prep Resources</Text>
+            {interviewPrep.prepResources.map((resource, index) => (
+              <Text key={`prep-resource-${index}`} style={styles.atsFeedbackItem}>
+                {`\u2022 ${resource}`}
+              </Text>
+            ))}
+          </View>
+        </View>
+      </View>
+    );
+  };
+
   const renderSavedVersionsSection = () => (
     <SectionShell title="Saved Resume Versions" sectionKey="saved">
       {savedVersions.length === 0 ? (
@@ -2903,6 +3582,131 @@ ${cert.details || ''}`.trim()
               {`\u2022 ${feedback}`}
             </Text>
           ))}
+        </View>
+
+        <View style={styles.atsBreakdownCard}>
+          <Text style={styles.atsBreakdownTitle}>Tailoring Reasoning</Text>
+          <View style={styles.reasoningCardGrid}>
+            {atsInsights.reasoningCards.map(
+              (card: { title: string; body: string }, index: number) => (
+                <View key={`${card.title}-${index}`} style={styles.reasoningCard}>
+                  <Text style={styles.reasoningCardTitle}>{card.title}</Text>
+                  <Text style={styles.reasoningCardBody}>{card.body}</Text>
+                </View>
+              )
+            )}
+          </View>
+        </View>
+
+        <View style={styles.atsBreakdownCard}>
+          <Text style={styles.atsBreakdownTitle}>Resume Gap Analyzer</Text>
+
+          <View style={styles.gapGrid}>
+            <View style={styles.gapCard}>
+              <Text style={styles.gapCardTitle}>Technical Skills</Text>
+              <View style={styles.keywordChipRow}>
+                {atsInsights.gapAnalysis.technicalSkills.length > 0 ? (
+                  atsInsights.gapAnalysis.technicalSkills.map((keyword: string) => (
+                    <View key={`gap-tech-${keyword}`} style={styles.keywordChip}>
+                      <Text style={styles.keywordChipText}>{formatKeywordLabel(keyword)}</Text>
+                    </View>
+                  ))
+                ) : (
+                  <Text style={styles.resultBody}>No major technical gaps detected.</Text>
+                )}
+              </View>
+            </View>
+
+            <View style={styles.gapCard}>
+              <Text style={styles.gapCardTitle}>Business Language</Text>
+              <View style={styles.keywordChipRow}>
+                {atsInsights.gapAnalysis.businessLanguage.length > 0 ? (
+                  atsInsights.gapAnalysis.businessLanguage.map((keyword: string) => (
+                    <View key={`gap-business-${keyword}`} style={styles.keywordChipMuted}>
+                      <Text style={styles.keywordChipMutedText}>{formatKeywordLabel(keyword)}</Text>
+                    </View>
+                  ))
+                ) : (
+                  <Text style={styles.resultBody}>The resume already reflects the main business language pretty well.</Text>
+                )}
+              </View>
+            </View>
+
+            <View style={styles.gapCard}>
+              <Text style={styles.gapCardTitle}>Quantified Outcomes</Text>
+              {atsInsights.gapAnalysis.quantifiedOutcomes.length > 0 ? (
+                atsInsights.gapAnalysis.quantifiedOutcomes.map((item: string, index: number) => (
+                  <Text key={`gap-metrics-${index}`} style={styles.atsFeedbackItem}>
+                    {`\u2022 ${item}`}
+                  </Text>
+                ))
+              ) : (
+                <Text style={styles.resultBody}>You already have some measurable or concrete evidence showing up.</Text>
+              )}
+            </View>
+
+            <View style={styles.gapCard}>
+              <Text style={styles.gapCardTitle}>Tools / Platforms</Text>
+              <View style={styles.keywordChipRow}>
+                {atsInsights.gapAnalysis.toolsPlatforms.length > 0 ? (
+                  atsInsights.gapAnalysis.toolsPlatforms.map((keyword: string) => (
+                    <View key={`gap-tools-${keyword}`} style={styles.keywordChip}>
+                      <Text style={styles.keywordChipText}>{formatKeywordLabel(keyword)}</Text>
+                    </View>
+                  ))
+                ) : (
+                  <Text style={styles.resultBody}>No major platform gaps stand out right now.</Text>
+                )}
+              </View>
+            </View>
+
+            <View style={styles.gapCard}>
+              <Text style={styles.gapCardTitle}>Nice-to-have Qualifications</Text>
+              <View style={styles.keywordChipRow}>
+                {atsInsights.gapAnalysis.niceToHaveQualifications.length > 0 ? (
+                  atsInsights.gapAnalysis.niceToHaveQualifications.map((keyword: string) => (
+                    <View key={`gap-nice-${keyword}`} style={styles.keywordChipMuted}>
+                      <Text style={styles.keywordChipMutedText}>{formatKeywordLabel(keyword)}</Text>
+                    </View>
+                  ))
+                ) : (
+                  <Text style={styles.resultBody}>No major optional qualifications are missing from the job post signals we detected.</Text>
+                )}
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.fitAssessmentCard}>
+            <Text style={styles.gapCardTitle}>Can you still apply?</Text>
+            <View style={styles.fitAssessmentRow}>
+              <View
+                style={[
+                  styles.fitBadge,
+                  atsInsights.gapAnalysis.fitAssessment.label === 'Strong fit'
+                    ? styles.fitBadgeStrong
+                    : atsInsights.gapAnalysis.fitAssessment.label === 'Partial fit'
+                      ? styles.fitBadgePartial
+                      : styles.fitBadgeStretch,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.fitBadgeText,
+                    atsInsights.gapAnalysis.fitAssessment.label === 'Strong fit'
+                      ? styles.fitBadgeTextStrong
+                      : atsInsights.gapAnalysis.fitAssessment.label === 'Partial fit'
+                        ? styles.fitBadgeTextPartial
+                        : styles.fitBadgeTextStretch,
+                  ]}
+                >
+                  {atsInsights.gapAnalysis.fitAssessment.label}
+                </Text>
+              </View>
+              <Text style={styles.fitAssessmentText}>
+                {atsInsights.gapAnalysis.fitAssessment.description}
+              </Text>
+            </View>
+          </View>
         </View>
 
         <View style={styles.atsBreakdownCard}>
@@ -3277,10 +4081,7 @@ ${cert.details || ''}`.trim()
       return (
         <>
           {savedVersionsSection}
-          <View style={styles.loadingPanel}>
-            <ActivityIndicator size="large" />
-            <Text style={styles.loadingText}>Building your tailored resume...</Text>
-          </View>
+          {renderWorkflowTimeline()}
         </>
       );
     }
@@ -3298,14 +4099,16 @@ ${cert.details || ''}`.trim()
       );
     }
 
-      return (
-        <>
-          {savedVersionsSection}
-          {renderOutputOverview()}
-          {renderAtsSection()}
-          {renderEditorSections()}
-        </>
-      );
+    return (
+      <>
+        {savedVersionsSection}
+        {renderOutputOverview()}
+        {renderApplicationKitSection()}
+        {renderInterviewPrepSection()}
+        {renderAtsSection()}
+        {renderEditorSections()}
+      </>
+    );
   };
 
   if (profileLoading) {
@@ -3454,10 +4257,7 @@ ${cert.details || ''}`.trim()
                   ) : null}
 
                   {loading ? (
-                    <View style={styles.loadingPanel}>
-                      <ActivityIndicator size="large" />
-                      <Text style={styles.loadingText}>Building your tailored resume...</Text>
-                    </View>
+                    renderWorkflowTimeline()
                   ) : result ? (
                     renderOutputOverview()
                   ) : (
@@ -3472,6 +4272,8 @@ ${cert.details || ''}`.trim()
 
               {isDesktop && !loading ? (
                 <View style={styles.desktopBottomStack}>
+                  {renderApplicationKitSection()}
+                  {renderInterviewPrepSection()}
                   {renderAtsSection()}
                   {renderSaveVersionSection()}
                   {renderSavedVersionsSection()}
@@ -3660,16 +4462,99 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E2E8F0',
     borderRadius: 18,
-    padding: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 220,
+    padding: 24,
+    minHeight: 260,
     width: '100%',
   },
   loadingText: {
     color: '#64748B',
     marginTop: 12,
     fontSize: 15,
+  },
+  workflowHeader: {
+    marginBottom: 18,
+  },
+  workflowTitle: {
+    color: '#1E293B',
+    fontSize: 22,
+    fontWeight: '800',
+  },
+  workflowSubtitle: {
+    color: '#64748B',
+    fontSize: 14,
+    lineHeight: 21,
+    marginTop: 8,
+  },
+  workflowTimeline: {
+    marginTop: 4,
+  },
+  workflowStepRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    minHeight: 64,
+  },
+  workflowStepIndicatorWrap: {
+    alignItems: 'center',
+    marginRight: 14,
+  },
+  workflowStepIndicator: {
+    width: 28,
+    height: 28,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+  },
+  workflowStepIndicatorComplete: {
+    backgroundColor: '#2563EB',
+    borderColor: '#2563EB',
+  },
+  workflowStepIndicatorActive: {
+    backgroundColor: '#3B82F6',
+    borderColor: '#2563EB',
+  },
+  workflowStepIndicatorPending: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#CBD5E1',
+  },
+  workflowStepIndicatorCheck: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  workflowStepConnector: {
+    width: 2,
+    flex: 1,
+    marginTop: 6,
+    borderRadius: 999,
+  },
+  workflowStepConnectorComplete: {
+    backgroundColor: '#93C5FD',
+  },
+  workflowStepConnectorPending: {
+    backgroundColor: '#E2E8F0',
+  },
+  workflowStepTextWrap: {
+    flex: 1,
+    paddingTop: 2,
+    paddingBottom: 14,
+  },
+  workflowStepTitle: {
+    color: '#334155',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  workflowStepTitleActive: {
+    color: '#1E40AF',
+  },
+  workflowStepTitleComplete: {
+    color: '#1E293B',
+  },
+  workflowStepStatus: {
+    color: '#64748B',
+    fontSize: 13,
+    lineHeight: 20,
+    marginTop: 4,
   },
   title: {
     color: '#1E293B',
@@ -4059,6 +4944,100 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 14,
   },
+  applicationChecklist: {
+    marginTop: 2,
+  },
+  applicationChecklistItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+  },
+  applicationChecklistBadge: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginRight: 12,
+    marginTop: 2,
+  },
+  applicationChecklistBadgeComplete: {
+    backgroundColor: '#DCFCE7',
+    borderWidth: 1,
+    borderColor: '#86EFAC',
+  },
+  applicationChecklistBadgePending: {
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#FCD34D',
+  },
+  applicationChecklistBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  applicationChecklistBadgeTextComplete: {
+    color: '#166534',
+  },
+  applicationChecklistBadgeTextPending: {
+    color: '#92400E',
+  },
+  applicationChecklistTextWrap: {
+    flex: 1,
+  },
+  applicationChecklistTitle: {
+    color: '#1E293B',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  applicationChecklistHelper: {
+    color: '#64748B',
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 4,
+  },
+  applicationKitGrid: {
+    marginTop: 18,
+  },
+  applicationKitCard: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 12,
+  },
+  applicationKitTitle: {
+    color: '#1E293B',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  applicationKitStatValue: {
+    color: '#2563EB',
+    fontSize: 28,
+    fontWeight: '800',
+    marginTop: 8,
+  },
+  applicationKitBody: {
+    color: '#475569',
+    fontSize: 14,
+    lineHeight: 22,
+    marginTop: 8,
+  },
+  smallOutlineButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginTop: 12,
+  },
+  smallOutlineButtonText: {
+    color: '#1E40AF',
+    fontSize: 13,
+    fontWeight: '800',
+  },
   editorWorkspaceHeader: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
@@ -4303,6 +5282,95 @@ const styles = StyleSheet.create({
     color: '#334155',
     fontSize: 14,
     lineHeight: 22,
+    marginTop: 10,
+  },
+  reasoningCardGrid: {
+    marginTop: 14,
+  },
+  reasoningCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    padding: 14,
+    marginBottom: 12,
+  },
+  reasoningCardTitle: {
+    color: '#1E293B',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  reasoningCardBody: {
+    color: '#475569',
+    fontSize: 13,
+    lineHeight: 20,
+    marginTop: 6,
+  },
+  gapGrid: {
+    marginTop: 14,
+  },
+  gapCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    padding: 14,
+    marginBottom: 12,
+  },
+  gapCardTitle: {
+    color: '#1E293B',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  fitAssessmentCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    padding: 14,
+    marginTop: 2,
+  },
+  fitAssessmentRow: {
+    marginTop: 10,
+  },
+  fitBadge: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  fitBadgeStrong: {
+    backgroundColor: '#DCFCE7',
+    borderWidth: 1,
+    borderColor: '#86EFAC',
+  },
+  fitBadgePartial: {
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#FCD34D',
+  },
+  fitBadgeStretch: {
+    backgroundColor: '#FEE2E2',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+  },
+  fitBadgeText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  fitBadgeTextStrong: {
+    color: '#166534',
+  },
+  fitBadgeTextPartial: {
+    color: '#92400E',
+  },
+  fitBadgeTextStretch: {
+    color: '#991B1B',
+  },
+  fitAssessmentText: {
+    color: '#475569',
+    fontSize: 13,
+    lineHeight: 20,
     marginTop: 10,
   },
   atsActionRow: {
