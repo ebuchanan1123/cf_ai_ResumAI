@@ -2846,6 +2846,138 @@ ${cert.details || ''}`.trim()
     }
   };
 
+  const exportCoverLetterPdf = async () => {
+    if (!profile || !coverLetterDraft.coverLetter.trim()) return;
+
+    try {
+      setExportingPdf(true);
+
+      const companyName = importedJobPreview?.company || extractCompanyName(jobDescription);
+      const fileName = `${profile.fullName || 'User'}${
+        companyName ? ` ${companyName}` : ''
+      } cover letter.pdf`;
+
+      if (Platform.OS === 'web') {
+        const jspdfModule = await import('jspdf/dist/jspdf.es.min.js');
+        const { jsPDF } = jspdfModule as any;
+
+        const pdf = new jsPDF({
+          orientation: 'portrait',
+          unit: 'pt',
+          format: 'letter',
+        });
+
+        const pageWidth = pdf.internal.pageSize.getWidth();
+        const pageHeight = pdf.internal.pageSize.getHeight();
+        const marginX = 48;
+        const marginTop = 52;
+        const marginBottom = 52;
+        const contentWidth = pageWidth - marginX * 2;
+        const paragraphGap = 8;
+        let y = marginTop;
+
+        const ensureSpace = (needed: number) => {
+          if (y + needed > pageHeight - marginBottom) {
+            pdf.addPage();
+            y = marginTop;
+          }
+        };
+
+        const drawLines = (
+          text: string,
+          options?: {
+            fontSize?: number;
+            fontStyle?: 'normal' | 'bold';
+            color?: [number, number, number];
+            extraGap?: number;
+          }
+        ) => {
+          const safeText = normalizePdfText(text).trim();
+          if (!safeText) return;
+          const fontSize = options?.fontSize ?? 11;
+          const appliedLineHeight = fontSize + 4;
+          pdf.setFont('helvetica', options?.fontStyle ?? 'normal');
+          pdf.setFontSize(fontSize);
+          if (options?.color) {
+            pdf.setTextColor(options.color[0], options.color[1], options.color[2]);
+          } else {
+            pdf.setTextColor(24, 39, 75);
+          }
+          const lines = pdf.splitTextToSize(safeText, contentWidth);
+          ensureSpace(lines.length * appliedLineHeight + (options?.extraGap ?? 0));
+          pdf.text(lines, marginX, y);
+          y += lines.length * appliedLineHeight + (options?.extraGap ?? 0);
+        };
+
+        drawLines(profile.fullName || 'Your Name', {
+          fontSize: 18,
+          fontStyle: 'bold',
+          color: [17, 24, 39],
+          extraGap: 6,
+        });
+
+        const contactLine = buildContactItems(profile)
+          .map((item) => item.label)
+          .join(' | ');
+        if (contactLine) {
+          drawLines(contactLine, {
+            fontSize: 10.5,
+            color: [71, 85, 105],
+            extraGap: 16,
+          });
+        }
+
+        coverLetterDraft.coverLetter
+          .split(/\n\s*\n/)
+          .map((paragraph) => paragraph.trim())
+          .filter(Boolean)
+          .forEach((paragraph) => {
+            drawLines(paragraph, { fontSize: 11, extraGap: paragraphGap });
+          });
+
+        pdf.save(fileName);
+        return;
+      }
+
+      const html = `
+        <html>
+          <body style="font-family: Georgia, serif; padding: 48px; color: #18274B; line-height: 1.55;">
+            <h1 style="margin: 0 0 8px; font-size: 28px;">${escapeHtml(profile.fullName || 'Your Name')}</h1>
+            <div style="margin-bottom: 24px; font-size: 14px; color: #475569;">
+              ${escapeHtml(
+                buildContactItems(profile)
+                  .map((item) => item.label)
+                  .join(' | ')
+              )}
+            </div>
+            ${coverLetterDraft.coverLetter
+              .split(/\n\s*\n/)
+              .map((paragraph) => `<p style="margin: 0 0 14px;">${escapeHtml(paragraph.trim())}</p>`)
+              .join('')}
+          </body>
+        </html>
+      `.trim();
+
+      const { uri } = await Print.printToFileAsync({ html });
+
+      const canShare = await Sharing.isAvailableAsync();
+      if (!canShare) {
+        showAlert('PDF created', `Saved PDF at: ${uri}`);
+        return;
+      }
+
+      await Sharing.shareAsync(uri, {
+        mimeType: 'application/pdf',
+        dialogTitle: 'Share your tailored cover letter',
+        UTI: 'com.adobe.pdf',
+      });
+    } catch (err: any) {
+      showAlert('Error', err.message || 'Failed to export cover letter PDF.');
+    } finally {
+      setExportingPdf(false);
+    }
+  };
+
   const ToneButton = ({ value }: { value: Tone }) => {
     const active = tone === value;
 
@@ -2993,22 +3125,6 @@ ${cert.details || ''}`.trim()
         <Text style={styles.exportHelperText}>
           Use this package view to check that your resume, supporting materials, and talking points are all ready before you apply.
         </Text>
-
-        <View style={styles.actionRow}>
-          <TouchableOpacity style={styles.secondaryButtonCompact} onPress={copyFullResume}>
-            <Text style={styles.secondaryButtonCompactText}>Copy Resume</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.secondaryButtonCompact, exportingPdf && styles.disabledButton]}
-            onPress={exportPdf}
-            disabled={exportingPdf}
-          >
-            <Text style={styles.secondaryButtonCompactText}>
-              {exportingPdf ? 'Exporting...' : 'Download PDF'}
-            </Text>
-          </TouchableOpacity>
-        </View>
 
         <View style={styles.applicationChecklist}>
           {applicationKit.checklist.map((item) => (
@@ -3188,7 +3304,7 @@ ${cert.details || ''}`.trim()
         </Text>
         <Link href="../interview-prep" asChild>
           <TouchableOpacity style={styles.primaryButtonCompact}>
-            <Text style={styles.primaryButtonCompactText}>Ace the Interview -&gt;</Text>
+            <Text style={styles.primaryButtonCompactText}>Ace the Interview →</Text>
           </TouchableOpacity>
         </Link>
       </View>
@@ -3578,7 +3694,7 @@ ${cert.details || ''}`.trim()
     return (
       <>
         <View style={styles.resultCard}>
-          <Text style={styles.resultTitle}>Export Style</Text>
+          <Text style={styles.resultTitle}>Export Studio</Text>
           <Text style={styles.exportHelperText}>
             Switch styles any time. Your resume content stays the same, and you can export multiple versions without generating again.
           </Text>
@@ -3589,6 +3705,55 @@ ${cert.details || ''}`.trim()
             ))}
           </View>
 
+          <View style={styles.exportStudioGrid}>
+            <View style={styles.exportActionCard}>
+              <Text style={styles.exportActionTitle}>Resume</Text>
+              <View style={styles.exportActionRow}>
+                <TouchableOpacity style={styles.secondaryButtonCompact} onPress={copyFullResume}>
+                  <Text style={styles.secondaryButtonCompactText}>Copy</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.secondaryButtonCompact, exportingPdf && styles.disabledButton]}
+                  onPress={exportPdf}
+                  disabled={exportingPdf}
+                >
+                  <Text style={styles.secondaryButtonCompactText}>
+                    {exportingPdf ? 'Exporting...' : 'Export PDF'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <View style={styles.exportActionCard}>
+              <Text style={styles.exportActionTitle}>Cover Letter</Text>
+              <View style={styles.exportActionRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.secondaryButtonCompact,
+                    !coverLetterDraft.coverLetter.trim() && styles.disabledButton,
+                  ]}
+                  onPress={() => copySection(coverLetterDraft.coverLetter)}
+                  disabled={!coverLetterDraft.coverLetter.trim()}
+                >
+                  <Text style={styles.secondaryButtonCompactText}>Copy</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.secondaryButtonCompact,
+                    (exportingPdf || !coverLetterDraft.coverLetter.trim()) && styles.disabledButton,
+                  ]}
+                  onPress={exportCoverLetterPdf}
+                  disabled={exportingPdf || !coverLetterDraft.coverLetter.trim()}
+                >
+                  <Text style={styles.secondaryButtonCompactText}>
+                    {exportingPdf ? 'Exporting...' : 'Export PDF'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
         </View>
       </>
     );
@@ -4549,6 +4714,34 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginBottom: 18,
     marginHorizontal: -6,
+  },
+  exportStudioGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 4,
+    marginHorizontal: -6,
+  },
+  exportActionCard: {
+    flex: 1,
+    minWidth: 220,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 16,
+    padding: 14,
+    marginHorizontal: 6,
+    marginBottom: 12,
+  },
+  exportActionTitle: {
+    color: '#0F172A',
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  exportActionRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 12,
+    marginHorizontal: -5,
   },
   pillButton: {
     backgroundColor: '#FFFFFF',
