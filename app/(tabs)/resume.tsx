@@ -2926,7 +2926,7 @@ ${cert.details || ''}`.trim()
     try {
       setExportingPdf(true);
 
-      const companyName = importedJobPreview?.company || extractCompanyName(jobDescription);
+      const companyName = extractCompanyName(jobDescription);
       const fileName = `${profile.fullName || 'User'}${
         companyName ? ` ${companyName}` : ''
       } cover letter.pdf`;
