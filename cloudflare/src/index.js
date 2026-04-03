@@ -52,6 +52,7 @@ Your job is to help a candidate improve a tailored resume for a specific role.
 
 Rules:
 - Be practical, concise, and specific
+- Prefer short, polished answers in 1 to 3 compact paragraphs unless the user explicitly asks for more detail
 - Use only the provided context
 - Do not invent experience, metrics, projects, technologies, or certifications
 - Suggest truthful keyword alignment and resume improvements
@@ -306,7 +307,7 @@ export class ChatSession {
               content: userMessage.content,
             },
           ],
-          max_tokens: 260,
+          max_tokens: 420,
           temperature: 0.2,
         });
 
