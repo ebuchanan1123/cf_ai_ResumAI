@@ -1,4 +1,4 @@
-const MODEL = '@cf/meta/llama-3.1-8b-instruct';
+const MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 const SESSION_KEY = 'session';
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -15,6 +15,15 @@ const json = (body, init) =>
       ...(init?.headers || {}),
     },
   });
+
+const jsonError = (message, status = 500, details) =>
+  json(
+    {
+      error: message,
+      ...(details ? { details } : {}),
+    },
+    { status }
+  );
 
 const sanitizeText = (value, fallback = '') =>
   typeof value === 'string' ? value.trim() : fallback;
@@ -136,81 +145,89 @@ const isAuthorized = (request, env) => {
 
 export default {
   async fetch(request, env) {
-    if (request.method === 'OPTIONS') {
-      return new Response(null, {
-        status: 204,
-        headers: CORS_HEADERS,
-      });
-    }
-
-    const url = new URL(request.url);
-
-    if (url.pathname === '/health') {
-      return json({
-        ok: true,
-        service: 'ResumAI Cloudflare assistant',
-        date: new Date().toISOString(),
-      });
-    }
-
-    if (!isAuthorized(request, env)) {
-      return json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    if (request.method === 'POST' && url.pathname === '/assistant/session') {
-      const body = (await safeJson(request)) || {};
-      const sessionId = body.sessionId || crypto.randomUUID();
-      const stub = env.CHAT_SESSIONS.get(env.CHAT_SESSIONS.idFromName(sessionId));
-      const response = await stub.fetch('https://session.local/init', {
-        method: 'POST',
-        body: JSON.stringify({
-          sessionId,
-          profile: body.profile,
-          jobDescription: body.jobDescription,
-          resumeResult: body.resumeResult,
-          atsInsights: body.atsInsights,
-        }),
-      });
-
-      return new Response(response.body, {
-        status: response.status,
-        headers: {
-          ...CORS_HEADERS,
-          'Content-Type': 'application/json',
-        },
-      });
-    }
-
-    if (request.method === 'POST' && url.pathname === '/assistant/message') {
-      const body = await safeJson(request);
-      if (!sanitizeText(body?.message)) {
-        return json({ error: 'Message is required.' }, { status: 400 });
+    try {
+      if (request.method === 'OPTIONS') {
+        return new Response(null, {
+          status: 204,
+          headers: CORS_HEADERS,
+        });
       }
 
-      const sessionId = body.sessionId || crypto.randomUUID();
-      const stub = env.CHAT_SESSIONS.get(env.CHAT_SESSIONS.idFromName(sessionId));
-      const response = await stub.fetch('https://session.local/message', {
-        method: 'POST',
-        body: JSON.stringify({
-          sessionId,
-          message: sanitizeText(body.message),
-          profile: body.profile,
-          jobDescription: body.jobDescription,
-          resumeResult: body.resumeResult,
-          atsInsights: body.atsInsights,
-        }),
-      });
+      const url = new URL(request.url);
 
-      return new Response(response.body, {
-        status: response.status,
-        headers: {
-          ...CORS_HEADERS,
-          'Content-Type': 'application/json',
-        },
-      });
+      if (url.pathname === '/health') {
+        return json({
+          ok: true,
+          service: 'ResumAI Cloudflare assistant',
+          date: new Date().toISOString(),
+        });
+      }
+
+      if (!isAuthorized(request, env)) {
+        return json({ error: 'Unauthorized' }, { status: 401 });
+      }
+
+      if (request.method === 'POST' && url.pathname === '/assistant/session') {
+        const body = (await safeJson(request)) || {};
+        const sessionId = body.sessionId || crypto.randomUUID();
+        const stub = env.CHAT_SESSIONS.get(env.CHAT_SESSIONS.idFromName(sessionId));
+        const response = await stub.fetch('https://session.local/init', {
+          method: 'POST',
+          body: JSON.stringify({
+            sessionId,
+            profile: body.profile,
+            jobDescription: body.jobDescription,
+            resumeResult: body.resumeResult,
+            atsInsights: body.atsInsights,
+          }),
+        });
+
+        return new Response(response.body, {
+          status: response.status,
+          headers: {
+            ...CORS_HEADERS,
+            'Content-Type': 'application/json',
+          },
+        });
+      }
+
+      if (request.method === 'POST' && url.pathname === '/assistant/message') {
+        const body = await safeJson(request);
+        if (!sanitizeText(body?.message)) {
+          return json({ error: 'Message is required.' }, { status: 400 });
+        }
+
+        const sessionId = body.sessionId || crypto.randomUUID();
+        const stub = env.CHAT_SESSIONS.get(env.CHAT_SESSIONS.idFromName(sessionId));
+        const response = await stub.fetch('https://session.local/message', {
+          method: 'POST',
+          body: JSON.stringify({
+            sessionId,
+            message: sanitizeText(body.message),
+            profile: body.profile,
+            jobDescription: body.jobDescription,
+            resumeResult: body.resumeResult,
+            atsInsights: body.atsInsights,
+          }),
+        });
+
+        return new Response(response.body, {
+          status: response.status,
+          headers: {
+            ...CORS_HEADERS,
+            'Content-Type': 'application/json',
+          },
+        });
+      }
+
+      return json({ error: 'Not found' }, { status: 404 });
+    } catch (error) {
+      return jsonError(
+        'Assistant worker request failed.',
+        500,
+        error instanceof Error ? error.message : String(error)
+      );
     }
-
-    return json({ error: 'Not found' }, { status: 404 });
   },
 };
 
@@ -221,94 +238,99 @@ export class ChatSession {
   }
 
   async fetch(request) {
-    const url = new URL(request.url);
-    const body = (await safeJson(request)) || {};
-    const stored =
-      (await this.ctx.storage.get(SESSION_KEY)) || {
-        context: {},
-        messages: [],
-        updatedAt: new Date().toISOString(),
-      };
+    try {
+      const url = new URL(request.url);
+      const body = (await safeJson(request)) || {};
+      const stored =
+        (await this.ctx.storage.get(SESSION_KEY)) || {
+          context: {},
+          messages: [],
+          updatedAt: new Date().toISOString(),
+        };
 
-    if (url.pathname === '/init') {
-      const nextSession = {
-        context: {
+      if (url.pathname === '/init') {
+        const nextSession = {
+          context: {
+            profile: body.profile ?? stored.context.profile,
+            jobDescription: body.jobDescription ?? stored.context.jobDescription,
+            resumeResult: body.resumeResult ?? stored.context.resumeResult,
+            atsInsights: body.atsInsights ?? stored.context.atsInsights,
+          },
+          messages: stored.messages,
+          updatedAt: new Date().toISOString(),
+        };
+
+        await this.ctx.storage.put(SESSION_KEY, nextSession);
+
+        return json({
+          sessionId: body.sessionId || this.ctx.id.toString(),
+          messages: nextSession.messages,
+        });
+      }
+
+      if (url.pathname === '/message') {
+        const nextContext = {
           profile: body.profile ?? stored.context.profile,
           jobDescription: body.jobDescription ?? stored.context.jobDescription,
           resumeResult: body.resumeResult ?? stored.context.resumeResult,
           atsInsights: body.atsInsights ?? stored.context.atsInsights,
-        },
-        messages: stored.messages,
-        updatedAt: new Date().toISOString(),
-      };
+        };
 
-      await this.ctx.storage.put(SESSION_KEY, nextSession);
+        const userMessage = makeMessage('user', sanitizeText(body.message));
+        const history = [...stored.messages, userMessage].slice(-8);
+        const aiResult = await this.env.AI.run(MODEL, {
+          messages: [
+            {
+              role: 'system',
+              content: buildSystemPrompt(nextContext, history),
+            },
+            {
+              role: 'user',
+              content: userMessage.content,
+            },
+          ],
+          max_tokens: 260,
+          temperature: 0.2,
+        });
 
-      return json({
-        sessionId: body.sessionId || this.ctx.id.toString(),
-        messages: nextSession.messages,
-      });
+        const aiText = extractAiText(aiResult);
+        const parsed = parseModelJson(aiText);
+        const answer =
+          sanitizeText(parsed?.answer) ||
+          sanitizeText(aiText) ||
+          'The assistant returned an empty response. Check the Worker logs for the raw model output.';
+        const suggestedActions = Array.isArray(parsed?.suggestedActions)
+          ? parsed.suggestedActions
+              .map((item) => sanitizeText(item))
+              .filter(Boolean)
+              .slice(0, 4)
+          : [];
+
+        const assistantMessage = makeMessage('assistant', answer);
+        const nextMessages = [...history, assistantMessage].slice(-14);
+        const nextSession = {
+          context: nextContext,
+          messages: nextMessages,
+          updatedAt: new Date().toISOString(),
+        };
+
+        await this.ctx.storage.put(SESSION_KEY, nextSession);
+
+        return json({
+          sessionId: body.sessionId || this.ctx.id.toString(),
+          answer,
+          messages: nextMessages,
+          suggestedActions,
+        });
+      }
+
+      return json({ error: 'Not found' }, { status: 404 });
+    } catch (error) {
+      return jsonError(
+        'Assistant session request failed.',
+        500,
+        error instanceof Error ? error.message : String(error)
+      );
     }
-
-    if (url.pathname === '/message') {
-      const nextContext = {
-        profile: body.profile ?? stored.context.profile,
-        jobDescription: body.jobDescription ?? stored.context.jobDescription,
-        resumeResult: body.resumeResult ?? stored.context.resumeResult,
-        atsInsights: body.atsInsights ?? stored.context.atsInsights,
-      };
-
-      const userMessage = makeMessage('user', sanitizeText(body.message));
-      const history = [...stored.messages, userMessage].slice(-8);
-      const aiResult = await this.env.AI.run(MODEL, {
-        messages: [
-          {
-            role: 'system',
-            content: buildSystemPrompt(nextContext, history),
-          },
-          {
-            role: 'user',
-            content: userMessage.content,
-          },
-        ],
-        max_tokens: 260,
-        temperature: 0.2,
-        response_format: {
-          type: 'json_object',
-        },
-      });
-
-      const aiText = extractAiText(aiResult);
-      const parsed = parseModelJson(aiText);
-      const answer =
-        sanitizeText(parsed?.answer) ||
-        sanitizeText(aiText) ||
-        'The assistant returned an empty response. Check the Worker logs for the raw model output.';
-      const suggestedActions = Array.isArray(parsed?.suggestedActions)
-        ? parsed.suggestedActions
-            .map((item) => sanitizeText(item))
-            .filter(Boolean)
-            .slice(0, 4)
-        : [];
-
-      const assistantMessage = makeMessage('assistant', answer);
-      const nextMessages = [...history, assistantMessage].slice(-14);
-      const nextSession = {
-        context: nextContext,
-        messages: nextMessages,
-        updatedAt: new Date().toISOString(),
-      };
-
-      await this.ctx.storage.put(SESSION_KEY, nextSession);
-
-      return json({
-        sessionId: body.sessionId || this.ctx.id.toString(),
-        answer,
-        messages: nextMessages,
-        suggestedActions,
-      });
-    }
-
-    return json({ error: 'Not found' }, { status: 404 });
   }
 }

@@ -1835,7 +1835,11 @@ ${cert.details || ''}`.trim()
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.error || 'Failed to reach the assistant.');
+        const details =
+          typeof data.details === 'string' && data.details.trim()
+            ? ` ${data.details.trim()}`
+            : '';
+        throw new Error((data.error || 'Failed to reach the assistant.') + details);
       }
 
       setAssistantSessionId(typeof data.sessionId === 'string' ? data.sessionId : assistantSessionId);
