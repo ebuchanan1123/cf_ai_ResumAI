@@ -185,7 +185,12 @@ export default {
   },
 };
 
-export class ChatSession extends DurableObject {
+export class ChatSession {
+  constructor(ctx, env) {
+    this.ctx = ctx;
+    this.env = env;
+  }
+
   async fetch(request) {
     const url = new URL(request.url);
     const body = (await safeJson(request)) || {};
