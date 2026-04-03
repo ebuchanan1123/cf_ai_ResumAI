@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'expo-router';
 import {
   ActivityIndicator,
@@ -821,6 +821,7 @@ const METRICS_LANGUAGE_PATTERN =
 export default function ResumeScreen() {
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1400;
+  const scrollViewRef = useRef<ScrollView | null>(null);
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [profileLoading, setProfileLoading] = useState(true);
@@ -1059,6 +1060,11 @@ export default function ResumeScreen() {
     let usageConsumed = false;
 
     try {
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+      scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+
       setLoading(true);
       setResult(null);
       resetAssistant();
@@ -3631,34 +3637,6 @@ ${cert.details || ''}`.trim()
           </Text>
         </TouchableOpacity>
       </View>
-
-      {importedJobPreview ? (
-        <View style={styles.jobPreviewCard}>
-          <Text style={styles.jobPreviewTitle}>
-            {importedJobPreview.title || 'Imported job posting'}
-          </Text>
-          <Text style={styles.jobPreviewMeta}>
-            {[importedJobPreview.company, importedJobPreview.location].filter(Boolean).join(' • ') ||
-              'Company and location could not be fully confirmed'}
-          </Text>
-          <Text style={styles.jobPreviewStatus}>
-            {importedJobPreview.parseSucceeded
-              ? 'Imported successfully. You can still edit the description manually below.'
-              : 'Best-effort parse only. Review and edit the description manually below.'}
-          </Text>
-          <View style={styles.keywordChipRow}>
-            {importedJobPreview.keywords.length > 0 ? (
-              importedJobPreview.keywords.map((keyword) => (
-                <View key={`job-preview-${keyword}`} style={styles.keywordChipMuted}>
-                  <Text style={styles.keywordChipMutedText}>{formatKeywordLabel(keyword)}</Text>
-                </View>
-              ))
-            ) : (
-              <Text style={styles.resultBody}>No parsed keywords available yet.</Text>
-            )}
-          </View>
-        </View>
-      ) : null}
     </View>
   );
 
@@ -4484,6 +4462,7 @@ ${cert.details || ''}`.trim()
         keyboardVerticalOffset={0}
       >
         <ScrollView
+          ref={scrollViewRef}
           style={styles.screen}
           contentContainerStyle={contentContainerStyle}
           keyboardShouldPersistTaps="handled"
