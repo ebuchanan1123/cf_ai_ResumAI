@@ -851,7 +851,7 @@ export default function ResumeScreen() {
   const [assistantLoading, setAssistantLoading] = useState(false);
   const [assistantError, setAssistantError] = useState('');
   const [assistantOpen, setAssistantOpen] = useState(false);
-  const [assistantInputHeight, setAssistantInputHeight] = useState(48);
+  const [assistantInputHeight, setAssistantInputHeight] = useState(44);
 
   const [expandedSections, setExpandedSections] = useState<Record<ResultSectionKey, boolean>>({
     saved: false,
@@ -951,7 +951,7 @@ export default function ResumeScreen() {
 
         return prev + 1;
       });
-    }, 700);
+    }, 1800);
 
     return () => clearInterval(intervalId);
   }, [loading]);
@@ -1250,7 +1250,7 @@ export default function ResumeScreen() {
     setAssistantInput('');
     setAssistantError('');
     setAssistantOpen(false);
-    setAssistantInputHeight(48);
+    setAssistantInputHeight(44);
   };
 
   const updateSummary = (text: string) => {
@@ -3974,7 +3974,7 @@ ${cert.details || ''}`.trim()
     return (
       <View style={styles.assistantOverlay}>
         {assistantOpen ? (
-          <View style={[styles.assistantWindow, { width: Math.min(width - 32, 380) }]}>
+          <View style={[styles.assistantWindow, { width: Math.min(width - 24, 430) }]}>
             <View style={styles.assistantWindowHeader}>
               <View>
                 <Text style={styles.assistantWindowEyebrow}>Cloudflare AI</Text>
@@ -4057,7 +4057,7 @@ ${cert.details || ''}`.trim()
               onContentSizeChange={(event) => {
                 const nextHeight = Math.min(
                   92,
-                  Math.max(48, Math.ceil(event.nativeEvent.contentSize.height) + 18)
+                  Math.max(44, Math.ceil(event.nativeEvent.contentSize.height) + 14)
                 );
                 setAssistantInputHeight(nextHeight);
               }}
@@ -4087,14 +4087,16 @@ ${cert.details || ''}`.trim()
           </View>
         ) : null}
 
-        <TouchableOpacity
-          style={styles.assistantFab}
-          onPress={() => setAssistantOpen((prev) => !prev)}
-          activeOpacity={0.9}
-        >
-          <Text style={styles.assistantFabIcon}>AI</Text>
-          <Text style={styles.assistantFabText}>Ask AI</Text>
-        </TouchableOpacity>
+        {!assistantOpen ? (
+          <TouchableOpacity
+            style={styles.assistantFab}
+            onPress={() => setAssistantOpen(true)}
+            activeOpacity={0.9}
+          >
+            <Text style={styles.assistantFabIcon}>AI</Text>
+            <Text style={styles.assistantFabText}>Ask AI</Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
     );
   };
@@ -5292,15 +5294,15 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   assistantWindow: {
-    width: 360,
-    maxWidth: 360,
-    maxHeight: 560,
+    width: 420,
+    maxWidth: 420,
+    height: 620,
+    maxHeight: 620,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#BFDBFE',
     borderRadius: 24,
     padding: 16,
-    marginBottom: 14,
     shadowColor: '#0F172A',
     shadowOpacity: 0.14,
     shadowRadius: 22,
@@ -5330,7 +5332,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 20,
     marginTop: 10,
-    marginBottom: 12,
+    marginBottom: 10,
   },
   assistantCloseButton: {
     backgroundColor: '#EFF6FF',
@@ -5373,7 +5375,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   assistantMessagesScroll: {
-    maxHeight: 250,
+    flex: 1,
     marginTop: 4,
   },
   assistantMessagesContent: {
@@ -5431,10 +5433,10 @@ const styles = StyleSheet.create({
   },
   assistantInput: {
     marginTop: 12,
-    minHeight: 48,
+    minHeight: 44,
     maxHeight: 92,
-    paddingTop: 12,
-    paddingBottom: 12,
+    paddingTop: 10,
+    paddingBottom: 10,
   },
   exportHelperText: {
     color: '#64748B',

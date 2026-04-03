@@ -1,4 +1,4 @@
-const MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
+const MODEL = '@cf/meta/llama-3.1-8b-instruct';
 const SESSION_KEY = 'session';
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -27,7 +27,7 @@ const safeJson = async (request) => {
   }
 };
 
-const compactJson = (value, maxChars = 6000) => {
+const compactJson = (value, maxChars = 3500) => {
   const serialized = JSON.stringify(value ?? {}, null, 2);
   if (serialized.length <= maxChars) {
     return serialized;
@@ -259,7 +259,7 @@ export class ChatSession {
       };
 
       const userMessage = makeMessage('user', sanitizeText(body.message));
-      const history = [...stored.messages, userMessage].slice(-12);
+      const history = [...stored.messages, userMessage].slice(-8);
       const aiResult = await this.env.AI.run(MODEL, {
         messages: [
           {
@@ -271,8 +271,8 @@ export class ChatSession {
             content: userMessage.content,
           },
         ],
-        max_tokens: 700,
-        temperature: 0.3,
+        max_tokens: 260,
+        temperature: 0.2,
         response_format: {
           type: 'json_object',
         },
