@@ -5380,8 +5380,8 @@ const styles = StyleSheet.create({
   assistantWindow: {
     width: 420,
     maxWidth: 420,
-    height: 620,
-    maxHeight: 620,
+    height: 500,
+    maxHeight: 500,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#BFDBFE',
