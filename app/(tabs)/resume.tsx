@@ -122,6 +122,7 @@ type AssistantMessage = {
 type ResultSectionKey =
   | 'saved'
   | 'ats'
+  | 'applicationKit'
   | 'summary'
   | 'education'
   | 'skills'
@@ -857,10 +858,12 @@ export default function ResumeScreen() {
   const [assistantLoading, setAssistantLoading] = useState(false);
   const [assistantSuggestions, setAssistantSuggestions] = useState<string[]>([]);
   const [assistantError, setAssistantError] = useState('');
+  const [assistantOpen, setAssistantOpen] = useState(false);
 
   const [expandedSections, setExpandedSections] = useState<Record<ResultSectionKey, boolean>>({
     saved: false,
     ats: true,
+    applicationKit: false,
     summary: false,
     education: false,
     skills: false,
@@ -1109,6 +1112,7 @@ export default function ResumeScreen() {
       setExpandedSections({
         saved: false,
         ats: true,
+        applicationKit: false,
         summary: false,
         education: false,
         skills: false,
@@ -1248,6 +1252,7 @@ export default function ResumeScreen() {
     setAssistantInput('');
     setAssistantSuggestions([]);
     setAssistantError('');
+    setAssistantOpen(false);
   };
 
   const updateSummary = (text: string) => {
@@ -1801,6 +1806,8 @@ ${cert.details || ''}`.trim()
       showAlert('Error', 'Enter a question for the assistant.');
       return;
     }
+
+    setAssistantOpen(true);
 
     const userMessage: AssistantMessage = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
@@ -3329,9 +3336,11 @@ ${cert.details || ''}`.trim()
     if (!applicationKit) return null;
 
     return (
-      <View style={styles.resultCard}>
-        <Text style={styles.sectionEyebrow}>Application Kit</Text>
-        <Text style={styles.resultTitle}>Everything You Need To Apply</Text>
+      <SectionShell
+        title="Application Kit"
+        sectionKey="applicationKit"
+        description="Everything you need to apply, organized in one place"
+      >
         <Text style={styles.exportHelperText}>
           Use this package view to check that your resume, supporting materials, and talking points are all ready before you apply.
         </Text>
@@ -3427,7 +3436,7 @@ ${cert.details || ''}`.trim()
             )}
           </View>
         </View>
-      </View>
+      </SectionShell>
     );
   };
 
@@ -3969,104 +3978,132 @@ ${cert.details || ''}`.trim()
     );
   };
 
-  const renderAssistantPanel = () => {
+  const renderAssistantWidget = () => {
     if (!result) return null;
 
     return (
-      <View style={styles.resultCard}>
-        <Text style={styles.sectionEyebrow}>Cloudflare AI</Text>
-        <Text style={styles.resultTitle}>Ask AI About This Role</Text>
-        <Text style={styles.exportHelperText}>
-          Ask follow-up questions about the job, your ATS gaps, or how to improve a specific part of this resume.
-        </Text>
-
-        <View style={styles.assistantPromptRow}>
-          {ASSISTANT_PROMPTS.map((prompt) => (
-            <TouchableOpacity
-              key={prompt}
-              style={[
-                styles.assistantPromptChip,
-                assistantLoading && styles.disabledButton,
-              ]}
-              onPress={() => askAssistant(prompt)}
-              disabled={assistantLoading}
-            >
-              <Text style={styles.assistantPromptChipText}>{prompt}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        <View style={styles.assistantMessagesWrap}>
-          {assistantMessages.length > 0 ? (
-            assistantMessages.map((message) => (
-              <View
-                key={message.id}
-                style={[
-                  styles.assistantMessageBubble,
-                  message.role === 'user'
-                    ? styles.assistantMessageBubbleUser
-                    : styles.assistantMessageBubbleAssistant,
-                ]}
-              >
-                <Text style={styles.assistantMessageRole}>
-                  {message.role === 'user' ? 'You' : 'ResumAI Assistant'}
-                </Text>
-                <Text style={styles.assistantMessageText}>{message.content}</Text>
+      <View style={styles.assistantOverlay}>
+        {assistantOpen ? (
+          <View style={[styles.assistantWindow, { width: Math.min(width - 32, 380) }]}>
+            <View style={styles.assistantWindowHeader}>
+              <View>
+                <Text style={styles.assistantWindowEyebrow}>Cloudflare AI</Text>
+                <Text style={styles.assistantWindowTitle}>Ask ResumAI</Text>
               </View>
-            ))
-          ) : (
-            <Text style={styles.resultBody}>
-              Start with a quick prompt like “What keywords am I missing?” or paste a bullet and ask for a stronger rewrite.
-            </Text>
-          )}
-        </View>
+              <TouchableOpacity
+                style={styles.assistantCloseButton}
+                onPress={() => setAssistantOpen(false)}
+              >
+                <Text style={styles.assistantCloseButtonText}>Close</Text>
+              </TouchableOpacity>
+            </View>
 
-        {assistantSuggestions.length > 0 ? (
-          <View style={styles.assistantSuggestionCard}>
-            <Text style={styles.assistantSuggestionTitle}>Suggested next steps</Text>
-            {assistantSuggestions.map((item) => (
-              <Text key={item} style={styles.atsFeedbackItem}>
-                {`\u2022 ${item}`}
-              </Text>
-            ))}
+            <Text style={styles.assistantWindowSubtitle}>
+              Ask about ATS fit, summary wording, skills, or a specific bullet while you edit.
+            </Text>
+
+            <View style={styles.assistantPromptRow}>
+              {ASSISTANT_PROMPTS.map((prompt) => (
+                <TouchableOpacity
+                  key={prompt}
+                  style={[
+                    styles.assistantPromptChip,
+                    assistantLoading && styles.disabledButton,
+                  ]}
+                  onPress={() => askAssistant(prompt)}
+                  disabled={assistantLoading}
+                >
+                  <Text style={styles.assistantPromptChipText}>{prompt}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <ScrollView
+              style={styles.assistantMessagesScroll}
+              contentContainerStyle={styles.assistantMessagesContent}
+              keyboardShouldPersistTaps="handled"
+            >
+              {assistantMessages.length > 0 ? (
+                assistantMessages.map((message) => (
+                  <View
+                    key={message.id}
+                    style={[
+                      styles.assistantMessageBubble,
+                      message.role === 'user'
+                        ? styles.assistantMessageBubbleUser
+                        : styles.assistantMessageBubbleAssistant,
+                    ]}
+                  >
+                    <Text style={styles.assistantMessageRole}>
+                      {message.role === 'user' ? 'You' : 'ResumAI Assistant'}
+                    </Text>
+                    <Text style={styles.assistantMessageText}>{message.content}</Text>
+                  </View>
+                ))
+              ) : (
+                <Text style={styles.resultBody}>
+                  Start with a quick prompt like “What keywords am I missing?” or paste a bullet and ask for a stronger rewrite.
+                </Text>
+              )}
+
+              {assistantSuggestions.length > 0 ? (
+                <View style={styles.assistantSuggestionCard}>
+                  <Text style={styles.assistantSuggestionTitle}>Suggested next steps</Text>
+                  {assistantSuggestions.map((item) => (
+                    <Text key={item} style={styles.atsFeedbackItem}>
+                      {`\u2022 ${item}`}
+                    </Text>
+                  ))}
+                </View>
+              ) : null}
+            </ScrollView>
+
+            {assistantError ? (
+              <Text style={styles.assistantErrorText}>{assistantError}</Text>
+            ) : null}
+
+            <TextInput
+              style={[styles.editInput, styles.assistantInput]}
+              multiline
+              value={assistantInput}
+              onChangeText={setAssistantInput}
+              placeholder="Ask about this role, ATS fit, summary, skills, or a specific bullet..."
+              placeholderTextColor="#8C8C8C"
+              textAlignVertical="top"
+            />
+
+            <View style={styles.actionRow}>
+              <TouchableOpacity
+                style={[styles.primaryButtonCompact, assistantLoading && styles.disabledButton]}
+                onPress={() => askAssistant()}
+                disabled={assistantLoading}
+              >
+                <Text style={styles.primaryButtonCompactText}>
+                  {assistantLoading ? 'Thinking...' : 'Send'}
+                </Text>
+              </TouchableOpacity>
+
+              {assistantMessages.length > 0 ? (
+                <TouchableOpacity
+                  style={[styles.secondaryButtonCompact, assistantLoading && styles.disabledButton]}
+                  onPress={resetAssistant}
+                  disabled={assistantLoading}
+                >
+                  <Text style={styles.secondaryButtonCompactText}>New Chat</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
           </View>
         ) : null}
 
-        {assistantError ? (
-          <Text style={styles.assistantErrorText}>{assistantError}</Text>
-        ) : null}
-
-        <TextInput
-          style={[styles.editInput, styles.assistantInput]}
-          multiline
-          value={assistantInput}
-          onChangeText={setAssistantInput}
-          placeholder="Ask about this role, ATS fit, summary, skills, or a specific bullet..."
-          placeholderTextColor="#8C8C8C"
-          textAlignVertical="top"
-        />
-
-        <View style={styles.actionRow}>
-          <TouchableOpacity
-            style={[styles.primaryButtonCompact, assistantLoading && styles.disabledButton]}
-            onPress={() => askAssistant()}
-            disabled={assistantLoading}
-          >
-            <Text style={styles.primaryButtonCompactText}>
-              {assistantLoading ? 'Thinking...' : 'Send to Assistant'}
-            </Text>
-          </TouchableOpacity>
-
-          {assistantMessages.length > 0 ? (
-            <TouchableOpacity
-              style={[styles.secondaryButtonCompact, assistantLoading && styles.disabledButton]}
-              onPress={resetAssistant}
-              disabled={assistantLoading}
-            >
-              <Text style={styles.secondaryButtonCompactText}>New Chat</Text>
-            </TouchableOpacity>
-          ) : null}
-        </View>
+        <TouchableOpacity
+          style={styles.assistantFab}
+          onPress={() => setAssistantOpen((prev) => !prev)}
+          activeOpacity={0.9}
+        >
+          <Text style={styles.assistantFabIcon}>AI</Text>
+          <Text style={styles.assistantFabText}>Ask AI</Text>
+        </TouchableOpacity>
       </View>
     );
   };
@@ -4389,7 +4426,6 @@ ${cert.details || ''}`.trim()
       <>
         {savedVersionsSection}
         {renderOutputOverview()}
-        {renderAssistantPanel()}
         {renderAtsSection()}
         {renderApplicationKitSection()}
         {renderInterviewPrepCta()}
@@ -4489,13 +4525,14 @@ ${cert.details || ''}`.trim()
                   <View style={styles.sectionCard}>
                     <Text style={styles.sectionEyebrow}>Role Input</Text>
                     <Text style={styles.sectionTitle}>Target Job Description</Text>
-                    <Text style={styles.sectionSupportText}>
-                      Add the job posting you want to target. ResumAI will tailor your resume around the most relevant language and requirements.
-                    </Text>
-                    {renderJobImporter()}
-                    <TextInput
-                      style={[styles.input, styles.jobDescriptionArea]}
-                      multiline
+                  <Text style={styles.sectionSupportText}>
+                    Add the job posting you want to target. ResumAI will tailor your resume around the most relevant language and requirements.
+                  </Text>
+                  {renderJobImporter()}
+                  <Text style={styles.label}>Paste Job Description Here</Text>
+                  <TextInput
+                    style={[styles.input, styles.jobDescriptionArea]}
+                    multiline
                       value={jobDescription}
                       onChangeText={setJobDescription}
                       placeholder="Paste the internship job description here..."
@@ -4546,10 +4583,7 @@ ${cert.details || ''}`.trim()
                   {loading ? (
                     renderWorkflowTimeline()
                   ) : result ? (
-                    <>
-                      {renderOutputOverview()}
-                      {renderAssistantPanel()}
-                    </>
+                    renderOutputOverview()
                   ) : (
                     <View style={styles.emptyState}>
                       <Text style={styles.emptyStateText}>
@@ -4613,6 +4647,7 @@ ${cert.details || ''}`.trim()
                     Add the job posting you want to target. ResumAI will tailor your resume around the most relevant language and requirements.
                   </Text>
                   {renderJobImporter()}
+                  <Text style={styles.label}>Paste Job Description Here</Text>
                   <TextInput
                     style={[styles.input, styles.jobDescriptionArea, styles.jobDescriptionAreaCompact]}
                     multiline
@@ -4659,6 +4694,7 @@ ${cert.details || ''}`.trim()
             </View>
           )}
         </ScrollView>
+        {renderAssistantWidget()}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -5256,6 +5292,91 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 23,
   },
+  assistantOverlay: {
+    position: 'absolute',
+    left: 18,
+    bottom: 18,
+    zIndex: 30,
+    alignItems: 'flex-start',
+  },
+  assistantWindow: {
+    width: 360,
+    maxWidth: 360,
+    maxHeight: 560,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    borderRadius: 24,
+    padding: 16,
+    marginBottom: 14,
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.14,
+    shadowRadius: 22,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 8,
+  },
+  assistantWindowHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  assistantWindowEyebrow: {
+    color: '#2563EB',
+    fontSize: 12,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  assistantWindowTitle: {
+    color: '#0F172A',
+    fontSize: 26,
+    fontWeight: '800',
+    marginTop: 4,
+  },
+  assistantWindowSubtitle: {
+    color: '#64748B',
+    fontSize: 13,
+    lineHeight: 20,
+    marginTop: 10,
+    marginBottom: 12,
+  },
+  assistantCloseButton: {
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  assistantCloseButtonText: {
+    color: '#1D4ED8',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  assistantFab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0F172A',
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 6,
+  },
+  assistantFabIcon: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '900',
+    marginRight: 8,
+  },
+  assistantFabText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
+  },
   assistantPromptRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -5279,6 +5400,13 @@ const styles = StyleSheet.create({
   },
   assistantMessagesWrap: {
     marginTop: 8,
+  },
+  assistantMessagesScroll: {
+    maxHeight: 250,
+    marginTop: 4,
+  },
+  assistantMessagesContent: {
+    paddingBottom: 4,
   },
   assistantMessageBubble: {
     borderRadius: 16,
