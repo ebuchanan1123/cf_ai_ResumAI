@@ -58,6 +58,9 @@ Rules:
 - Explain ATS issues in plain English
 - If asked to rewrite content, keep it polished and ATS-friendly
 - Avoid em dashes; use commas, periods, or standard hyphens instead
+- Never mention JSON, objects, fields, schemas, or "suggestedActions" in the visible answer
+- Do not print code blocks, raw structured data, or labels like "Here are suggested actions"
+- If you have next steps, weave them naturally into the prose response
 - Return valid JSON only in this exact format:
 {
   "answer": "string",
@@ -106,6 +109,20 @@ const parseModelJson = (value) => {
 
     return null;
   }
+};
+
+const cleanVisibleAnswer = (value) => {
+  const text = sanitizeText(value);
+  if (!text) return '';
+
+  return text
+    .replace(/```(?:json)?[\s\S]*?```/gi, '')
+    .replace(/^\s*Here are suggested actions:?\s*/i, '')
+    .replace(/^\s*"answer"\s*:\s*/i, '')
+    .replace(/^\s*"suggestedActions"\s*:\s*/i, '')
+    .replace(/\{\s*"answer"[\s\S]*$/i, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 };
 
 const extractAiText = (result) => {
@@ -296,8 +313,8 @@ export class ChatSession {
         const aiText = extractAiText(aiResult);
         const parsed = parseModelJson(aiText);
         const answer =
-          sanitizeText(parsed?.answer) ||
-          sanitizeText(aiText) ||
+          cleanVisibleAnswer(parsed?.answer) ||
+          cleanVisibleAnswer(aiText) ||
           'The assistant returned an empty response. Check the Worker logs for the raw model output.';
         const suggestedActions = Array.isArray(parsed?.suggestedActions)
           ? parsed.suggestedActions
