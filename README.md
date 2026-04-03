@@ -1,136 +1,161 @@
 # ResumAI
 
-ResumAI is an AI-powered resume optimization tool that helps job seekers transform rough experience descriptions into strong, professional resume bullet points and tailored resumes for specific job descriptions.
+ResumAI is an AI-powered resume builder that helps candidates tailor resumes, generate cover letters, analyze ATS fit, and now chat with a Cloudflare-powered assistant about a specific job application.
 
-The goal of this project is to make resume writing faster, clearer, and more optimized for modern hiring processes.
+## What It Does
 
----
+- Generate a tailored resume from a saved profile and pasted job description
+- Generate a matching cover letter for the same role
+- Score ATS alignment and surface keyword gaps
+- Build an application kit with recruiter messaging and supporting materials
+- Export resume and cover letter PDFs
+- Open a floating AI chat widget to ask:
+  - why an ATS score is low
+  - what keywords are missing
+  - how to improve bullets
+  - how to rewrite a summary for a role
 
-## Features
+## Cloudflare AI Assistant
 
-### AI Resume Bullet Generator
-Convert raw work experience into polished resume bullet points.
+The assistant was added as a Cloudflare-native layer on top of the existing app data model.
 
-Example:
+### Cloudflare Components Used
 
-Input:
+- `Workers AI`
+  - Runs the LLM used by the in-app assistant
+- `Cloudflare Worker`
+  - Accepts chat requests from the app
+  - packages profile, job description, tailored resume, and ATS context
+  - coordinates the response flow
+- `Durable Objects`
+  - Store per-session chat memory so the assistant can continue a conversation
 
-"helped customers, handled payments, answered questions, managed returns"
+### Why This Approach Works
 
-Output:
+ResumAI already had rich application context:
 
-• Managed high-volume customer transactions while maintaining accurate payment processing and cash-handling procedures  
-• Assisted customers with product inquiries, purchases, and returns while maintaining strong service standards  
-• Maintained organized store operations and supported efficient checkout processes during peak hours  
+- saved user profile
+- pasted job description
+- generated resume result
+- ATS insight data
 
----
+That makes the Cloudflare piece more useful than a generic chatbot. The assistant answers questions grounded in the actual job application the user is working on.
 
-### Bullet Editing Workflow
-Generated bullets can be:
-
-• edited directly  
-• regenerated individually  
-• copied to clipboard  
-• copied all at once  
-
----
-
-### Resume Tailoring (Upcoming Feature)
-
-Users will be able to:
-
-• upload a PDF resume  
-• paste a job description  
-• generate a tailored version of their resume
-
-The system will return:
-
-• improved professional summary  
-• optimized experience bullet points  
-• suggested keywords to include  
-• skills to highlight for the role  
-
----
-
-## Tech Stack
+## Architecture
 
 ### Frontend
-React Native  
-Expo  
-Expo Router  
 
-### Backend
-Node.js  
-Express  
+- Expo
+- React Native
+- Expo Router
+- Hosted on Vercel for the web app
 
-### AI
-OpenAI API for language generation and resume optimization
+### Existing Backend
 
+- Node.js
+- Express
+- OpenAI-backed resume and cover letter generation endpoints
 
----
+### Cloudflare Assistant Backend
 
-## How It Works
+- `wrangler.jsonc`
+- [cloudflare/src/index.js](./cloudflare/src/index.js)
+- Workers AI model call
+- Durable Object session memory
 
-1. User enters job title and raw experience
-2. App sends request to backend
-3. Backend calls the OpenAI API
-4. AI generates structured resume bullets
-5. Results are returned and displayed in the mobile app
+### Deployment Split
 
----
+- `Vercel`
+  - main ResumAI web app
+- `Render`
+  - existing Express API
+- `Cloudflare`
+  - assistant chat backend
 
-## Future Improvements
+## Main User Flow
 
-• Resume PDF upload  
-• Resume tailoring for job descriptions  
-• ATS keyword analysis  
-• Resume scoring system  
-• Export optimized resume  
+1. User pastes a job description
+2. ResumAI generates a tailored resume
+3. ATS analysis scores alignment and surfaces missing terms
+4. The user opens the floating AI assistant
+5. The app sends:
+   - profile
+   - job description
+   - tailored resume
+   - ATS insights
+6. The Cloudflare Worker calls Workers AI
+7. Durable Objects keep the conversation state for that session
+8. The response is shown in the in-app chat widget
 
----
+## Repo Notes
 
-## Running the Project
+### Important Files
 
-### Install dependencies
+- [app/(tabs)/resume.tsx](./app/(tabs)/resume.tsx)
+- [backend/server.js](./backend/server.js)
+- [cloudflare/src/index.js](./cloudflare/src/index.js)
+- [wrangler.jsonc](./wrangler.jsonc)
+- [docs/cloudflare-assistant-setup.md](./docs/cloudflare-assistant-setup.md)
+- [docs/cloudflare-project-summary.md](./docs/cloudflare-project-summary.md)
+
+### Environment Variables
 
 Frontend:
 
-npm install
+- `EXPO_PUBLIC_RESUMAI_ASSISTANT_URL`
 
 Backend:
 
-cd backend
+- existing OpenAI backend environment variables for resume generation
+
+### Cloudflare Bindings
+
+- `AI`
+- `CHAT_SESSIONS`
+
+## Local Development
+
+Install dependencies:
+
+```bash
 npm install
+cd backend && npm install
+```
 
+Run the app:
 
----
-
-### Start backend
-
-node server.js
-
----
-### Start the Expo app
-
+```bash
 npx expo start
+```
 
-Open the project using **Expo Go**.
+Run the existing backend:
 
----
+```bash
+cd backend
+node server.js
+```
 
-## Purpose of the Project
+Run the Cloudflare assistant locally:
 
-This project was built as a portfolio application demonstrating:
+```bash
+npm run cf:dev
+```
 
-• React Native mobile development  
-• AI integration  
-• backend API design  
-• UX design for productivity tools  
+Deploy the Cloudflare assistant directly:
 
----
+```bash
+npm run cf:deploy
+```
+
+## Submission Notes
+
+For the Cloudflare application, this project now includes all four requested pieces:
+
+- `LLM`: Workers AI
+- `Workflow / coordination`: Cloudflare Worker
+- `User input via chat`: in-app floating chat UI
+- `Memory / state`: Durable Objects
 
 ## Author
 
-Created by Evan Buchanan
-
-Computer Science Student @ UOttawa
+Created by Evan Buchanan.
