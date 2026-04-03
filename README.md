@@ -30,16 +30,6 @@ The assistant was added as a Cloudflare-native layer on top of the existing app 
 - `Durable Objects`
   - Store per-session chat memory so the assistant can continue a conversation
 
-### Why This Approach Works
-
-ResumAI already had rich application context:
-
-- saved user profile
-- pasted job description
-- generated resume result
-- ATS insight data
-
-That makes the Cloudflare piece more useful than a generic chatbot. The assistant answers questions grounded in the actual job application the user is working on.
 
 ## Architecture
 
