@@ -848,9 +848,9 @@ export default function ResumeScreen() {
   const [assistantMessages, setAssistantMessages] = useState<AssistantMessage[]>([]);
   const [assistantInput, setAssistantInput] = useState('');
   const [assistantLoading, setAssistantLoading] = useState(false);
-  const [assistantSuggestions, setAssistantSuggestions] = useState<string[]>([]);
   const [assistantError, setAssistantError] = useState('');
   const [assistantOpen, setAssistantOpen] = useState(false);
+  const [assistantInputHeight, setAssistantInputHeight] = useState(48);
 
   const [expandedSections, setExpandedSections] = useState<Record<ResultSectionKey, boolean>>({
     saved: false,
@@ -1242,9 +1242,9 @@ export default function ResumeScreen() {
     setAssistantSessionId(null);
     setAssistantMessages([]);
     setAssistantInput('');
-    setAssistantSuggestions([]);
     setAssistantError('');
     setAssistantOpen(false);
+    setAssistantInputHeight(48);
   };
 
   const updateSummary = (text: string) => {
@@ -1854,12 +1854,32 @@ ${cert.details || ''}`.trim()
             },
           ];
 
-      setAssistantMessages(nextMessages);
-      setAssistantSuggestions(
-        Array.isArray(data.suggestedActions)
-          ? data.suggestedActions.map((item: string) => item.trim()).filter(Boolean).slice(0, 4)
-          : []
-      );
+      const cleanedSuggestions = Array.isArray(data.suggestedActions)
+        ? data.suggestedActions.map((item: string) => item.trim()).filter(Boolean).slice(0, 4)
+        : [];
+
+      const messagesWithSuggestions =
+        cleanedSuggestions.length > 0
+          ? nextMessages.map((message, index) => {
+              const isLastAssistantMessage =
+                message.role === 'assistant' &&
+                index ===
+                  nextMessages.map((item) => item.role).lastIndexOf('assistant');
+
+              if (!isLastAssistantMessage) {
+                return message;
+              }
+
+              return {
+                ...message,
+                content: `${message.content}\n\nSuggested next steps:\n${cleanedSuggestions
+                  .map((item) => `- ${item}`)
+                  .join('\n')}`,
+              };
+            })
+          : nextMessages;
+
+      setAssistantMessages(messagesWithSuggestions);
     } catch (err: any) {
       setAssistantError(err.message || 'Failed to reach the assistant.');
       setAssistantMessages((prev) => prev.filter((message) => message.id !== userMessage.id));
@@ -4039,20 +4059,9 @@ ${cert.details || ''}`.trim()
                 ))
               ) : (
                 <Text style={styles.resultBody}>
-                  Ask about ATS fit, summary wording, missing keywords, or paste a bullet for a sharper rewrite.
+                  Ask a question about this role or your resume.
                 </Text>
               )}
-
-              {assistantSuggestions.length > 0 ? (
-                <View style={styles.assistantSuggestionCard}>
-                  <Text style={styles.assistantSuggestionTitle}>Suggested next steps</Text>
-                  {assistantSuggestions.map((item) => (
-                    <Text key={item} style={styles.atsFeedbackItem}>
-                      {`\u2022 ${item}`}
-                    </Text>
-                  ))}
-                </View>
-              ) : null}
             </ScrollView>
 
             {assistantError ? (
@@ -4060,13 +4069,20 @@ ${cert.details || ''}`.trim()
             ) : null}
 
             <TextInput
-              style={[styles.editInput, styles.assistantInput]}
+              style={[styles.editInput, styles.assistantInput, { height: assistantInputHeight }]}
               multiline
               value={assistantInput}
               onChangeText={setAssistantInput}
-              placeholder="Ask about this role, ATS fit, summary, skills, or a specific bullet..."
+              placeholder="Type your message..."
               placeholderTextColor="#8C8C8C"
               textAlignVertical="top"
+              onContentSizeChange={(event) => {
+                const nextHeight = Math.min(
+                  92,
+                  Math.max(48, Math.ceil(event.nativeEvent.contentSize.height) + 18)
+                );
+                setAssistantInputHeight(nextHeight);
+              }}
             />
 
             <View style={styles.actionRow}>
@@ -5428,19 +5444,6 @@ const styles = StyleSheet.create({
   assistantMessageRoleUser: {
     color: '#DBEAFE',
   },
-  assistantSuggestionCard: {
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    borderRadius: 16,
-    padding: 14,
-    marginTop: 6,
-  },
-  assistantSuggestionTitle: {
-    color: '#1E293B',
-    fontSize: 14,
-    fontWeight: '800',
-  },
   assistantErrorText: {
     color: '#B91C1C',
     fontSize: 13,
@@ -5448,9 +5451,11 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   assistantInput: {
-    minHeight: 92,
     marginTop: 12,
+    minHeight: 48,
+    maxHeight: 92,
     paddingTop: 12,
+    paddingBottom: 12,
   },
   exportHelperText: {
     color: '#64748B',
