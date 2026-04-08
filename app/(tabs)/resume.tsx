@@ -1383,7 +1383,10 @@ ${profile.fullName || 'Your Name'}
 ${headline}
 ${headerLine}
 
-SKILLS
+${result.summary.trim() ? `SUMMARY
+${result.summary.trim()}
+
+` : ''}SKILLS
 ${skillGroups.map((group) => `${group.label}: ${group.values.join(', ')}`).join('\n')}
 
 PROJECTS
@@ -2538,6 +2541,10 @@ ${cert.details || ''}`.trim()
         font-weight: 700;
         color: ${currentStyle.headingColor};
       }
+
+      .summary-text {
+        margin: 0;
+      }
     </style>
   </head>
   <body>
@@ -2545,6 +2552,15 @@ ${cert.details || ''}`.trim()
     <h1>${escapeHtml(profile.fullName || 'Your Name')}</h1>
     <div class="headline">${escapeHtml(headline)}</div>
     <div class="contact">${contactLine}</div>
+
+    ${
+      result.summary.trim()
+        ? `
+    <div class="section-title">SUMMARY</div>
+    <p class="summary-text">${escapeHtml(result.summary.trim())}</p>
+    `
+        : ''
+    }
 
     <div class="section-title">SKILLS</div>
     ${skillGroups
@@ -2981,6 +2997,17 @@ ${cert.details || ''}`.trim()
         if (contactItems.length) {
           drawContactLine(contactItems);
           y += 8;
+        }
+
+        if (result.summary.trim()) {
+          drawSectionTitle('SUMMARY');
+          y += sectionContentGap;
+          drawWrappedText(result.summary.trim(), bodyX, bodyContentWidth, {
+            fontSize: 10.5,
+            lineGap: 14,
+            color: theme.textColor,
+          });
+          y += itemGap;
         }
 
         if (skillGroups.length) {
