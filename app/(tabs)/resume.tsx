@@ -5,6 +5,7 @@ import {
   Alert,
   Animated,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   SafeAreaView,
   ScrollView,
@@ -71,6 +72,7 @@ type ResumeStyle =
   | 'Cobalt';
 
 type TailoredResumeResponse = {
+  companyName?: string;
   summary: string;
   skills: string[];
   experience: {
@@ -112,6 +114,14 @@ type ImportedJobPreview = {
   keywords: string[];
   sourceUrl: string;
   parseSucceeded: boolean;
+};
+
+type ContactLookupState = {
+  status: 'idle' | 'loading' | 'found' | 'not_found' | 'error';
+  companyName: string;
+  email: string;
+  message: string;
+  sources: { title: string; url: string }[];
 };
 
 type AssistantMessage = {
@@ -425,13 +435,40 @@ const extractCompanyName = (jobDescription: string) => {
   return '';
 };
 
-const buildResumePdfFilename = (profile: UserProfile | null, jobDescription: string) => {
-  const namePart = toFilenamePart(profile?.fullName || 'Resume') || 'Resume';
-  const companyPart = toFilenamePart(extractCompanyName(jobDescription));
+const resolveTargetCompanyName = ({
+  resumeResult,
+  importedJobPreview,
+  jobDescription,
+}: {
+  resumeResult: TailoredResumeResponse | null;
+  importedJobPreview: ImportedJobPreview | null;
+  jobDescription: string;
+}) => {
+  const modelCompany = toFilenamePart(resumeResult?.companyName || '');
+  if (modelCompany) return modelCompany;
 
-  return companyPart
-    ? `${namePart} ${companyPart} resume.pdf`
-    : `${namePart} resume.pdf`;
+  const importedCompany = toFilenamePart(importedJobPreview?.company || '');
+  if (importedCompany) return importedCompany;
+
+  return toFilenamePart(extractCompanyName(jobDescription));
+};
+
+const buildExportPdfFilename = ({
+  profile,
+  companyName,
+  documentLabel,
+  fallbackName,
+}: {
+  profile: UserProfile | null;
+  companyName: string;
+  documentLabel: string;
+  fallbackName: string;
+}) => {
+  const namePart = toFilenamePart(profile?.fullName || fallbackName) || fallbackName;
+
+  return companyName
+    ? `${namePart} ${companyName} ${documentLabel}.pdf`
+    : `${namePart} ${documentLabel}.pdf`;
 };
 
 const ATS_STOP_WORDS = new Set([
@@ -808,6 +845,14 @@ const createEmptyCoverLetterDraftState = (): CoverLetterDraft => ({
   coverLetter: '',
 });
 
+const createEmptyContactLookupState = (): ContactLookupState => ({
+  status: 'idle',
+  companyName: '',
+  email: '',
+  message: '',
+  sources: [],
+});
+
 const TECHNICAL_KEYWORD_PATTERN =
   /\b(api|apis|backend|frontend|full[\s-]?stack|react|react native|next\.?js|node|node\.?js|nest|nest\.?js|typescript|javascript|python|java|c\+\+|postgres|postgresql|mysql|sql|mongodb|docker|kubernetes|aws|azure|gcp|cloud|deployment|devops|ci\/cd|graphql|rest|microservices|redis|firebase|openai|llm|ai|machine learning)\b/i;
 
@@ -854,6 +899,9 @@ export default function ResumeScreen() {
   const [assistantError, setAssistantError] = useState('');
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [assistantInputHeight, setAssistantInputHeight] = useState(24);
+  const [contactLookup, setContactLookup] = useState<ContactLookupState>(
+    createEmptyContactLookupState()
+  );
 
   const [expandedSections, setExpandedSections] = useState<Record<ResultSectionKey, boolean>>({
     saved: false,
@@ -1104,6 +1152,7 @@ export default function ResumeScreen() {
 
       const nextResumeResult = {
         ...data,
+        companyName: typeof data.companyName === 'string' ? data.companyName : '',
         skills: Array.isArray(data.skills) ? data.skills : [],
       };
 
@@ -1253,6 +1302,87 @@ export default function ResumeScreen() {
     setAssistantError('');
     setAssistantOpen(false);
     setAssistantInputHeight(24);
+  };
+
+  const targetCompanyName = resolveTargetCompanyName({
+    resumeResult: result,
+    importedJobPreview,
+    jobDescription,
+  });
+
+  useEffect(() => {
+    setContactLookup(createEmptyContactLookupState());
+  }, [targetCompanyName, importedJobPreview?.sourceUrl, importedJobPreview?.title, importedJobPreview?.location]);
+
+  const findCompanyContactEmail = async () => {
+    if (!targetCompanyName) {
+      showAlert('No company found', 'Add a clearer job posting or import a job URL first.');
+      return;
+    }
+
+    try {
+      setContactLookup({
+        status: 'loading',
+        companyName: targetCompanyName,
+        email: '',
+        message: '',
+        sources: [],
+      });
+
+      const res = await fetch(`${API_URL}/find-company-contact-email`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          companyName: targetCompanyName,
+          sourceUrl: importedJobPreview?.sourceUrl || jobUrl,
+          jobTitle: importedJobPreview?.title || '',
+          location: importedJobPreview?.location || '',
+          jobDescription,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to look up a follow-up email.');
+      }
+
+      setContactLookup({
+        status: data.status === 'found' ? 'found' : 'not_found',
+        companyName: typeof data.companyName === 'string' ? data.companyName : targetCompanyName,
+        email: typeof data.email === 'string' ? data.email : '',
+        message:
+          typeof data.message === 'string' && data.message.trim()
+            ? data.message
+            : data.status === 'found'
+              ? 'Public follow-up email found.'
+              : "We couldn't find a public recruiting email for this company.",
+        sources: Array.isArray(data.sources)
+          ? data.sources
+              .filter(
+                (item: { title?: string; url?: string }) =>
+                  item && typeof item.url === 'string' && item.url.trim()
+              )
+              .map((item: { title?: string; url: string }) => ({
+                title:
+                  typeof item.title === 'string' && item.title.trim() ? item.title : item.url,
+                url: item.url,
+              }))
+              .slice(0, 4)
+          : [],
+      });
+    } catch (err: any) {
+      setContactLookup({
+        status: 'error',
+        companyName: targetCompanyName,
+        email: '',
+        message: err.message || 'Failed to look up a follow-up email.',
+        sources: [],
+      });
+      showAlert('Error', err.message || 'Failed to look up a follow-up email.');
+    }
   };
 
   const updateSummary = (text: string) => {
@@ -1910,7 +2040,7 @@ ${cert.details || ''}`.trim()
     const projectLead = result.projects[0];
     const experienceLead = result.experience[0];
     const topKeywords = atsInsights?.matchedKeywords.slice(0, 3).map(formatKeywordLabel) ?? [];
-    const companyName = importedJobPreview?.company || extractCompanyName(jobDescription) || 'the team';
+    const companyName = targetCompanyName || 'the team';
     const roleTitle =
       importedJobPreview?.title ||
       extractSentences(jobDescription).find((sentence) => /(engineer|developer|analyst|intern|specialist|associate|manager)/i.test(sentence)) ||
@@ -1967,13 +2097,14 @@ ${cert.details || ''}`.trim()
     ];
 
     return {
+      companyName,
       checklist,
       bullets: bulletDraft.bullets,
       coverLetter: coverLetterDraft.coverLetter.trim(),
       recruiterMessage,
       whyImFit,
     };
-  }, [atsInsights, bulletDraft.bullets, coverLetterDraft.coverLetter, importedJobPreview, jobDescription, profile, result]);
+  }, [atsInsights, bulletDraft.bullets, coverLetterDraft.coverLetter, importedJobPreview, jobDescription, profile, result, targetCompanyName]);
 
   const copyFullResume = async () => {
     if (!fullResumeText) return;
@@ -2769,6 +2900,11 @@ ${cert.details || ''}`.trim()
 
     try {
       setExportingPdf(true);
+      const companyName = resolveTargetCompanyName({
+        resumeResult: result,
+        importedJobPreview,
+        jobDescription,
+      });
 
       if (Platform.OS === 'web') {
         const jspdfModule = await import('jspdf/dist/jspdf.es.min.js');
@@ -3087,7 +3223,14 @@ ${cert.details || ''}`.trim()
           });
         }
 
-        pdf.save(buildResumePdfFilename(profile, jobDescription));
+        pdf.save(
+          buildExportPdfFilename({
+            profile,
+            companyName,
+            documentLabel: 'resume',
+            fallbackName: 'Resume',
+          })
+        );
 
         return;
       }
@@ -3120,10 +3263,17 @@ ${cert.details || ''}`.trim()
     try {
       setExportingPdf(true);
 
-      const companyName = extractCompanyName(jobDescription);
-      const fileName = `${profile.fullName || 'User'}${
-        companyName ? ` ${companyName}` : ''
-      } cover letter.pdf`;
+      const companyName = resolveTargetCompanyName({
+        resumeResult: result,
+        importedJobPreview,
+        jobDescription,
+      });
+      const fileName = buildExportPdfFilename({
+        profile,
+        companyName,
+        documentLabel: 'cover letter',
+        fallbackName: 'User',
+      });
 
       if (Platform.OS === 'web') {
         const jspdfModule = await import('jspdf/dist/jspdf.es.min.js');
@@ -3502,6 +3652,66 @@ ${cert.details || ''}`.trim()
               onPress={() => copySection(applicationKit.recruiterMessage)}
             >
               <Text style={styles.smallOutlineButtonText}>Copy</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.applicationKitCard}>
+            <Text style={styles.applicationKitTitle}>Follow-Up Email</Text>
+            <Text style={styles.applicationKitBody}>
+              {applicationKit.companyName
+                ? `Search for a public recruiting or contact email for ${applicationKit.companyName}.`
+                : 'Search for a public recruiting or contact email for this company.'}
+            </Text>
+
+            {contactLookup.status === 'loading' ? (
+              <View style={styles.contactLookupLoadingRow}>
+                <ActivityIndicator size="small" color="#2563EB" />
+                <Text style={styles.contactLookupMetaText}>Searching public web sources...</Text>
+              </View>
+            ) : null}
+
+            {contactLookup.status !== 'idle' && contactLookup.status !== 'loading' ? (
+              <View style={styles.contactLookupResultWrap}>
+                <Text style={styles.contactLookupStatusText}>{contactLookup.message}</Text>
+                {contactLookup.email ? (
+                  <>
+                    <Text style={styles.contactLookupEmail}>{contactLookup.email}</Text>
+                    <TouchableOpacity
+                      style={styles.smallOutlineButton}
+                      onPress={() => copySection(contactLookup.email)}
+                    >
+                      <Text style={styles.smallOutlineButtonText}>Copy email</Text>
+                    </TouchableOpacity>
+                  </>
+                ) : null}
+                {contactLookup.sources.length > 0 ? (
+                  <View style={styles.contactLookupSourcesWrap}>
+                    <Text style={styles.contactLookupMetaText}>Sources</Text>
+                    {contactLookup.sources.map((source, index) => (
+                      <TouchableOpacity
+                        key={`${source.url}-${index}`}
+                        onPress={() => Linking.openURL(source.url)}
+                      >
+                        <Text style={styles.contactLookupSourceLink}>{source.title}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                ) : null}
+              </View>
+            ) : null}
+
+            <TouchableOpacity
+              style={[
+                styles.smallOutlineButton,
+                (!applicationKit.companyName || contactLookup.status === 'loading') &&
+                  styles.disabledButton,
+              ]}
+              onPress={findCompanyContactEmail}
+              disabled={!applicationKit.companyName || contactLookup.status === 'loading'}
+            >
+              <Text style={styles.smallOutlineButtonText}>
+                {contactLookup.status === 'idle' ? 'Find email' : 'Search again'}
+              </Text>
             </TouchableOpacity>
           </View>
 
@@ -5692,6 +5902,42 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 22,
     marginTop: 8,
+  },
+  contactLookupLoadingRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 12,
+  },
+  contactLookupResultWrap: {
+    marginTop: 12,
+  },
+  contactLookupStatusText: {
+    color: '#334155',
+    fontSize: 14,
+    lineHeight: 21,
+  },
+  contactLookupEmail: {
+    color: '#0F172A',
+    fontSize: 18,
+    fontWeight: '800',
+    marginTop: 10,
+  },
+  contactLookupSourcesWrap: {
+    marginTop: 12,
+  },
+  contactLookupMetaText: {
+    color: '#64748B',
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  contactLookupSourceLink: {
+    color: '#1D4ED8',
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 18,
+    marginTop: 6,
+    textDecorationLine: 'underline',
   },
   smallOutlineButton: {
     alignSelf: 'flex-start',

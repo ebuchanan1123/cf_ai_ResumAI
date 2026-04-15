@@ -55,6 +55,12 @@ const jobImportLimiter = createLimiter({
   message: 'Job import limit reached for this IP today. Please try again tomorrow.',
 });
 
+const contactLookupLimiter = createLimiter({
+  windowMs: 24 * 60 * 60 * 1000,
+  max: 20,
+  message: 'Follow-up email lookup limit reached for this IP today. Please try again tomorrow.',
+});
+
 app.use(generalLimiter);
 
 app.use(cors());
@@ -115,6 +121,38 @@ const stripHtml = (html = '') =>
       .replace(/&quot;/gi, '"')
       .replace(/&#39;/gi, "'")
   );
+
+const extractWebSources = (response) => {
+  const seen = new Set();
+  const collected = [];
+  const pushSource = (candidate) => {
+    const url = compactWhitespace(candidate?.url || '');
+    if (!url || seen.has(url)) return;
+    seen.add(url);
+    collected.push({
+      title: compactWhitespace(candidate?.title || url),
+      url,
+    });
+  };
+
+  const outputItems = Array.isArray(response?.output) ? response.output : [];
+  for (const item of outputItems) {
+    const directSources = Array.isArray(item?.action?.sources) ? item.action.sources : [];
+    directSources.forEach(pushSource);
+
+    const contentItems = Array.isArray(item?.content) ? item.content : [];
+    for (const content of contentItems) {
+      const annotations = Array.isArray(content?.annotations) ? content.annotations : [];
+      for (const annotation of annotations) {
+        if (annotation?.type === 'url_citation') {
+          pushSource(annotation);
+        }
+      }
+    }
+  }
+
+  return collected.slice(0, 6);
+};
 
 app.get('/', (req, res) => {
   res.json({ message: 'Backend is running' });
@@ -494,6 +532,7 @@ Generate a tailored resume from the user's profile and the target job descriptio
 
 Return your answer in valid JSON only, with this exact structure:
 {
+  "companyName": "string",
   "summary": "string",
   "skills": ["string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string"],
   "experience": [
@@ -553,6 +592,9 @@ Rules:
 - Avoid duplicates, near-duplicates, and vague filler skills
 - Include relevant certifications when they strengthen the application
 - For summary, sound polished, ambitious, and specific; avoid weak filler phrases
+- For companyName, return the employer or hiring company this resume is being tailored to
+- Prefer the actual employer name over a job board, recruiting platform, or generic heading
+- If the employer is unclear, return an empty string
 - For missingKeywords, include only high-value role-specific technical terms or domain terms that are clearly relevant and truly absent
 - Do not include duplicate, overlapping, generic, or low-signal missing keywords
 - Keep the tone: ${tone || 'Technical'}
@@ -585,6 +627,7 @@ ${trimmedJobDescription}
     }
 
     return res.json({
+      companyName: typeof parsed.companyName === 'string' ? compactWhitespace(parsed.companyName) : '',
       summary: typeof parsed.summary === 'string' ? parsed.summary : '',
       skills: Array.isArray(parsed.skills) ? parsed.skills.slice(0, 12) : [],
       experience: Array.isArray(parsed.experience) ? parsed.experience.slice(0, 3) : [],
@@ -602,6 +645,111 @@ ${trimmedJobDescription}
 
     return res.status(500).json({
       error: error?.message || 'Failed to tailor resume.',
+    });
+  }
+});
+
+app.post('/find-company-contact-email', contactLookupLimiter, async (req, res) => {
+  try {
+    const { companyName, sourceUrl, jobTitle, jobDescription, location } = req.body;
+
+    if (!companyName || typeof companyName !== 'string' || !companyName.trim()) {
+      return res.status(400).json({
+        error: 'Missing or invalid company name.',
+      });
+    }
+
+    const trimmedCompanyName = compactWhitespace(companyName);
+    const trimmedSourceUrl = compactWhitespace(sourceUrl || '');
+    const trimmedJobTitle = compactWhitespace(jobTitle || '');
+    const trimmedLocation = compactWhitespace(location || '');
+    const trimmedJobDescription = trimTextForModel(jobDescription || '', 1200);
+
+    const prompt = `
+You are a recruiting contact researcher.
+
+Use web search to look for a public follow-up email address for a candidate who wants to politely follow up on an application.
+
+Return valid JSON only in this exact structure:
+{
+  "companyName": "string",
+  "email": "string",
+  "status": "found" | "not_found",
+  "message": "string"
+}
+
+Rules:
+- Search the public web for the company's recruiting, careers, talent acquisition, hiring, HR, or contact pages
+- Only return an email if it is explicitly shown on a public webpage
+- Prefer a recruiting or careers email on the company's own domain
+- If no recruiting-specific email is found, a public general contact email on the company's own domain is acceptable
+- Never guess a person's email address and never infer an email pattern
+- Do not use people-search, scraped contact, or data broker sites
+- If you cannot verify a public email, return status "not_found", email "" and the message "We couldn't find a public recruiting email for this company."
+- If you find an email, keep the message short and user-facing, for example "Public follow-up email found."
+
+Company:
+${trimmedCompanyName}
+
+Job title:
+${trimmedJobTitle}
+
+Location:
+${trimmedLocation}
+
+Job/source URL:
+${trimmedSourceUrl}
+
+Job description excerpt:
+${trimmedJobDescription}
+`;
+
+    const response = await client.responses.create({
+      model: 'gpt-5',
+      reasoning: { effort: 'low' },
+      tools: [
+        {
+          type: 'web_search',
+          user_location: {
+            type: 'approximate',
+            country: 'US',
+          },
+        },
+      ],
+      include: ['web_search_call.action.sources'],
+      input: prompt,
+    });
+
+    const text = (response.output_text || '').trim();
+
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      console.error('JSON PARSE ERROR /find-company-contact-email:', text);
+      return res.status(500).json({
+        error: 'Failed to parse follow-up email lookup.',
+      });
+    }
+
+    const email = compactWhitespace(parsed.email || '');
+    const status = parsed.status === 'found' && email ? 'found' : 'not_found';
+
+    return res.json({
+      companyName: compactWhitespace(parsed.companyName || trimmedCompanyName),
+      email,
+      status,
+      message:
+        status === 'found'
+          ? compactWhitespace(parsed.message || 'Public follow-up email found.')
+          : "We couldn't find a public recruiting email for this company.",
+      sources: extractWebSources(response),
+    });
+  } catch (error) {
+    console.error('OPENAI ERROR /find-company-contact-email:', error);
+
+    return res.status(500).json({
+      error: error?.message || 'Failed to look up a follow-up email.',
     });
   }
 });

@@ -11,6 +11,7 @@ export type ResumeOptimizationMode =
   | 'Startup-focused';
 
 export type TailoredResumeResponse = {
+  companyName?: string;
   summary: string;
   skills: string[];
   experience: {

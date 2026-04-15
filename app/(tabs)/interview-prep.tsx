@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 
-import { Link } from 'expo-router';
+import { Link, useFocusEffect } from 'expo-router';
 import { loadProfileFromStorage, type UserProfile } from '@/lib/profileStorage';
 import { loadCurrentResumeDraft, type ResumeDraft } from '@/lib/resumeStorage';
 
@@ -69,24 +69,31 @@ export default function InterviewPrepScreen() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [resumeDraft, setResumeDraft] = useState<ResumeDraft | null>(null);
 
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        const [storedProfile, storedDraft] = await Promise.all([
-          loadProfileFromStorage(),
-          loadCurrentResumeDraft(),
-        ]);
-        setProfile(storedProfile);
-        setResumeDraft(storedDraft);
-      } catch {
-        showAlert('Error', 'Failed to load your interview prep data.');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    void loadData();
+  const loadData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const [storedProfile, storedDraft] = await Promise.all([
+        loadProfileFromStorage(),
+        loadCurrentResumeDraft(),
+      ]);
+      setProfile(storedProfile);
+      setResumeDraft(storedDraft);
+    } catch {
+      showAlert('Error', 'Failed to load your interview prep data.');
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void loadData();
+  }, [loadData]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadData();
+    }, [loadData])
+  );
 
   const prep = useMemo(() => {
     if (!resumeDraft?.result || !profile) return null;
